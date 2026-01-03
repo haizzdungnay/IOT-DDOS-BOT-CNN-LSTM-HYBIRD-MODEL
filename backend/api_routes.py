@@ -130,20 +130,65 @@ def format_metrics_for_display(metrics):
 # MODEL EVALUATION APIs
 # =============================================================================
 
+def detect_model_name(filename: str) -> str:
+    """Extract model name from filename like CNN_best.pt, LSTM_v2.pt, etc."""
+    name = filename.replace('.pt', '').replace('.pth', '')
+    # Remove common suffixes
+    for suffix in ['_best', '_final', '_v1', '_v2', '_v3', '_last']:
+        name = name.replace(suffix, '')
+    # Handle special cases
+    if 'Hybrid_CNN_LSTM' in name or 'CNN_LSTM' in name:
+        return 'Hybrid'
+    if 'Parallel_Hybrid' in name or 'Parallel' in name:
+        return 'Parallel'
+    if 'LSTM_CNN' in name:
+        return 'LSTM_CNN'
+    return name.split('_')[0]  # Take first part as model name
+
+def scan_models_directory():
+    """Scan models directory and return available models dynamically"""
+    models = {}
+    
+    if not MODELS_DIR.exists():
+        return models
+    
+    # Scan for .pt and .pth files
+    for filepath in MODELS_DIR.glob('*.pt'):
+        filename = filepath.name
+        # Skip scaler files
+        if 'scaler' in filename.lower():
+            continue
+        
+        model_name = detect_model_name(filename)
+        
+        # If model already exists, prefer 'best' version
+        if model_name in models:
+            if 'best' in filename.lower():
+                models[model_name] = filename
+        else:
+            models[model_name] = filename
+    
+    # Also scan .pth files
+    for filepath in MODELS_DIR.glob('*.pth'):
+        filename = filepath.name
+        if 'scaler' in filename.lower():
+            continue
+        
+        model_name = detect_model_name(filename)
+        if model_name not in models:
+            models[model_name] = filename
+    
+    return models
+
 @api.route('/api/models/list', methods=['GET'])
 def list_models():
-    """Get list of available models with their status"""
+    """Get list of available models with their status - DYNAMIC SCANNING"""
     models = []
     
-    # Check backend/models directory
-    model_files = {
-        'CNN': 'CNN_best.pt',
-        'LSTM': 'LSTM_best.pt',
-        'Hybrid': 'Hybrid_CNN_LSTM_best.pt',
-        'Parallel': 'Parallel_Hybrid_best.pt'
-    }
+    # Dynamically scan models directory
+    model_files = scan_models_directory()
     
-    for name, filename in model_files.items():
+    for name, filename in sorted(model_files.items()):
         path = MODELS_DIR / filename
         exists = path.exists()
         
@@ -176,7 +221,7 @@ def evaluate_models():
         return jsonify({'status': 'error', 'message': 'Training/Evaluation already in progress'}), 400
     
     data = request.get_json()
-    models = data.get('models', ['CNN', 'LSTM', 'Hybrid'])
+    models = data.get('models', ['CNN', 'LSTM', 'Hybrid', 'Parallel'])
     
     def run_evaluation():
         global training_state
@@ -269,7 +314,7 @@ def start_training():
         return jsonify({'status': 'error', 'message': 'Training already in progress'}), 400
     
     data = request.get_json()
-    models = data.get('models', ['CNN', 'LSTM', 'Hybrid'])
+    models = data.get('models', ['CNN', 'LSTM', 'Hybrid', 'Parallel'])
     epochs = data.get('epochs', 30)
     batch_size = data.get('batch_size', 64)
     learning_rate = data.get('learning_rate', 0.001)

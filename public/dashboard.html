@@ -241,19 +241,9 @@
                     <div class="flex flex-wrap gap-4 items-end">
                         <div>
                             <label class="block text-sm text-gray-400 mb-2">Select Models</label>
-                            <div class="flex gap-3">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" value="CNN" checked class="eval-model-cb rounded">
-                                    <span>CNN</span>
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" value="LSTM" checked class="eval-model-cb rounded">
-                                    <span>LSTM</span>
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" value="Hybrid" checked class="eval-model-cb rounded">
-                                    <span>Hybrid</span>
-                                </label>
+                            <div id="evalModelsContainer" class="flex flex-wrap gap-3">
+                                <!-- Models will be loaded dynamically -->
+                                <span class="text-gray-500 text-sm">Loading models...</span>
                             </div>
                         </div>
                         <button onclick="runEvaluation()" id="evalBtn" class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg transition">
@@ -446,19 +436,9 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div>
                             <label class="block text-sm text-gray-400 mb-2">Models to Train</label>
-                            <div class="space-y-2">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" value="CNN" checked class="train-model-cb rounded">
-                                    <span>CNN</span>
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" value="LSTM" checked class="train-model-cb rounded">
-                                    <span>LSTM</span>
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" value="Hybrid" checked class="train-model-cb rounded">
-                                    <span>Hybrid</span>
-                                </label>
+                            <div id="trainModelsContainer" class="space-y-2">
+                                <!-- Models will be loaded dynamically -->
+                                <span class="text-gray-500 text-sm">Loading models...</span>
                             </div>
                         </div>
                         <div>

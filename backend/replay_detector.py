@@ -340,7 +340,9 @@ class ReplayDetector:
             'lstm_correct': 0,
             'lstm_wrong': 0,
             'hybrid_correct': 0,
-            'hybrid_wrong': 0
+            'hybrid_wrong': 0,
+            'parallel_correct': 0,
+            'parallel_wrong': 0
         }
         
         # Thread control
@@ -365,71 +367,81 @@ class ReplayDetector:
     
     def _load_models(self):
         """
-        Load 3 PyTorch models
+        Dynamically load all PyTorch models from the models directory.
         
-        Model configs:
-        - CNN: CNN1D → CNN_best.pt
-        - LSTM: LSTMModel → LSTM_best.pt
-        - Hybrid: Tự động detect kiến trúc dựa trên file name:
-            * LSTM_CNN_*.pt → HybridLSTMCNN (LSTM → CNN)
-            * Hybrid_CNN_LSTM_*.pt → HybridCNNLSTM (CNN → LSTM)
+        Supports automatic detection of model type from filename:
+        - *CNN*.pt → CNN1D
+        - *LSTM*.pt (not hybrid) → LSTMModel  
+        - *LSTM_CNN*.pt → HybridLSTMCNN (LSTM → CNN architecture)
+        - *Hybrid_CNN_LSTM*.pt or *CNN_LSTM*.pt → HybridCNNLSTM (CNN → LSTM)
+        - *Parallel*.pt → ParallelHybridCNNLSTM
         """
         self.models = {}
         
-        # Tìm file Hybrid trong thư mục
         import glob
         import os
-        hybrid_files = glob.glob(f"{self.models_dir}/LSTM_CNN_*.pt") + \
-                      glob.glob(f"{self.models_dir}/Hybrid_CNN_LSTM_*.pt") + \
-                      glob.glob(f"{self.models_dir}/Parallel_Hybrid_*.pt")
         
-        if not hybrid_files:
-            logger.warning(f"⚠️  No Hybrid model found in {self.models_dir}")
-            hybrid_filename = None
-            hybrid_class = HybridCNNLSTM  # Default
-        else:
-            hybrid_file = hybrid_files[0]  # Take first match
-            hybrid_filename = os.path.basename(hybrid_file)  # Extract filename only
-            # Detect architecture from filename
-            if 'Parallel_Hybrid' in hybrid_filename:
-                hybrid_class = ParallelHybridCNNLSTM
-                logger.info(f"📌 Detected PARALLEL (CNN ‖ LSTM) architecture")
-            elif 'LSTM_CNN' in hybrid_filename:
-                hybrid_class = HybridLSTMCNN
-                logger.info(f"📌 Detected LSTM → CNN architecture")
+        # Get all .pt files
+        all_model_files = glob.glob(f"{self.models_dir}/*.pt") + glob.glob(f"{self.models_dir}/*.pth")
+        
+        if not all_model_files:
+            logger.warning(f"⚠️  No model files found in {self.models_dir}")
+            return
+        
+        logger.info(f"📂 Found {len(all_model_files)} model files in {self.models_dir}")
+        
+        # Model class mapping based on filename patterns
+        def detect_model_class(filename):
+            """Detect model class and name from filename"""
+            basename = os.path.basename(filename).lower()
+            
+            # Order matters - check more specific patterns first
+            if 'parallel' in basename:
+                return 'Parallel', ParallelHybridCNNLSTM
+            elif 'lstm_cnn' in basename:
+                return 'Hybrid_LSTM_CNN', HybridLSTMCNN
+            elif 'hybrid_cnn_lstm' in basename or 'cnn_lstm' in basename:
+                return 'Hybrid', HybridCNNLSTM
+            elif 'lstm' in basename and 'cnn' not in basename:
+                return 'LSTM', LSTMModel
+            elif 'cnn' in basename and 'lstm' not in basename:
+                return 'CNN', CNN1D
             else:
-                hybrid_class = HybridCNNLSTM
-                logger.info(f"📌 Detected CNN → LSTM architecture")
+                # Unknown type - try to extract name from filename
+                name = os.path.splitext(os.path.basename(filename))[0]
+                name = name.replace('_best', '').replace('_', ' ').title().replace(' ', '')
+                logger.warning(f"⚠️  Unknown model type for {filename}, skipping...")
+                return None, None
         
-        model_configs = {
-            'CNN': (CNN1D, 'CNN_best.pt'),
-            'LSTM': (LSTMModel, 'LSTM_best.pt'),
-            'Hybrid': (hybrid_class, hybrid_filename)
-        }
-        
-        for name, (ModelClass, filename) in model_configs.items():
-            if filename is None:
-                logger.warning(f"⚠️  Skipping {name} model (no file found)")
+        loaded_count = 0
+        for model_file in all_model_files:
+            model_name, ModelClass = detect_model_class(model_file)
+            
+            if model_name is None or ModelClass is None:
                 continue
-                
+            
+            # Skip if already loaded (avoid duplicates)
+            if model_name in self.models:
+                logger.info(f"⚠️  Skipping duplicate model: {model_name}")
+                continue
+            
             try:
-                model_path = f"{self.models_dir}/{filename}"
                 model = ModelClass(n_features=15, time_steps=20)
                 
                 # Load weights
-                state_dict = torch.load(model_path, map_location=self.device)
+                state_dict = torch.load(model_file, map_location=self.device)
                 model.load_state_dict(state_dict)
                 model.to(self.device)
                 model.eval()
                 
-                self.models[name] = model
-                logger.info(f"✅ {name} model loaded from {model_path}")
+                self.models[model_name] = model
+                loaded_count += 1
+                logger.info(f"✅ {model_name} model loaded from {model_file}")
                 
             except Exception as e:
-                logger.error(f"❌ Failed to load {name} model: {e}")
-                raise
+                logger.error(f"❌ Failed to load {model_name} model from {model_file}: {e}")
         
-        logger.info(f"✅ All 3 models loaded successfully!")
+        logger.info(f"✅ Total {loaded_count} models loaded successfully!")
     
     def _prepare_csv_data(self, csv_path):
         """

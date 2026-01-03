@@ -102,6 +102,32 @@
       "dataset_path": "processed_data",
       "status": "failed",
       "duration_seconds": 2.785654
+    },
+    {
+      "id": 8,
+      "timestamp": "2026-01-03T19:48:39.507989",
+      "models": [
+        "CNN"
+      ],
+      "epochs": 30,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "dataset_path": "processed_data",
+      "status": "failed",
+      "duration_seconds": 1607.786642
+    },
+    {
+      "id": 9,
+      "timestamp": "2026-01-03T19:48:53.865871",
+      "models": [
+        "CNN"
+      ],
+      "epochs": 30,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "dataset_path": "processed_data",
+      "status": "failed",
+      "duration_seconds": 12.794255
     }
   ],
   "evaluations": [

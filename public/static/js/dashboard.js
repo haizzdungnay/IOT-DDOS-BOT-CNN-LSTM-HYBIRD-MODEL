@@ -32,19 +32,27 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(updateClock, 1000);
 });
 
+// Model colors for dynamic chart updates
+const MODEL_COLORS = {
+    'CNN': { border: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+    'LSTM': { border: '#22c55e', bg: 'rgba(34,197,94,0.1)' },
+    'Hybrid': { border: '#a855f7', bg: 'rgba(168,85,247,0.1)' },
+    'Parallel': { border: '#f97316', bg: 'rgba(249,115,22,0.1)' },
+    'default': { border: '#6b7280', bg: 'rgba(107,114,128,0.1)' }
+};
+
+// Store loaded model names for chart updates
+let loadedModelNames = [];
+
 function initializeCharts() {
-    // Live Chart for Real-time tab
+    // Live Chart for Real-time tab - will be updated dynamically when models load
     const liveCtx = document.getElementById('liveChart')?.getContext('2d');
     if (liveCtx) {
         liveChart = new Chart(liveCtx, {
             type: 'line',
             data: {
                 labels: [],
-                datasets: [
-                    { label: 'CNN', data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.4, borderWidth: 2, pointRadius: 0 },
-                    { label: 'LSTM', data: [], borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', tension: 0.4, borderWidth: 2, pointRadius: 0 },
-                    { label: 'Hybrid', data: [], borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.1)', tension: 0.4, borderWidth: 2, pointRadius: 0 }
-                ]
+                datasets: [] // Will be populated dynamically
             },
             options: {
                 responsive: true,
@@ -192,9 +200,83 @@ async function loadModelsData() {
             
             // Update detailed metrics table
             updateDetailedMetricsTable(models);
+            
+            // Update dynamic model checkboxes for Evaluation and Training tabs
+            renderModelCheckboxes(data.models, 'evalModelsContainer', 'eval-model-cb');
+            renderModelCheckboxes(data.models, 'trainModelsContainer', 'train-model-cb');
+            
+            // Update live chart datasets for all loaded models
+            updateLiveChartDatasets(models);
         }
     } catch (err) {
         console.error('Error loading models:', err);
+    }
+}
+
+// Function to update live chart datasets dynamically based on loaded models
+function updateLiveChartDatasets(models) {
+    if (!liveChart) return;
+    
+    const availableModels = models.filter(m => m.exists);
+    loadedModelNames = availableModels.map(m => m.name);
+    
+    // Create datasets for each model
+    liveChart.data.datasets = availableModels.map(m => {
+        const colors = MODEL_COLORS[m.name] || MODEL_COLORS['default'];
+        return {
+            label: m.name,
+            data: [],
+            borderColor: colors.border,
+            backgroundColor: colors.bg,
+            tension: 0.4,
+            borderWidth: 2,
+            pointRadius: 0
+        };
+    });
+    
+    liveChart.update();
+}
+
+// Function to dynamically render model checkboxes
+function renderModelCheckboxes(models, containerId, checkboxClass) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const colors = {
+        'CNN': 'blue',
+        'LSTM': 'green', 
+        'Hybrid': 'purple',
+        'Parallel': 'orange'
+    };
+    
+    // Only show models that exist
+    const availableModels = models.filter(m => m.exists);
+    
+    if (availableModels.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm">No models available. Train some models first.</p>';
+        return;
+    }
+    
+    if (checkboxClass === 'eval-model-cb') {
+        // Horizontal layout for evaluation tab
+        container.innerHTML = availableModels.map(m => {
+            const color = colors[m.name] || 'gray';
+            return `
+            <label class="flex items-center space-x-2 cursor-pointer bg-slate-700 px-4 py-2 rounded-lg hover:bg-slate-600 transition">
+                <input type="checkbox" value="${m.name}" class="${checkboxClass} accent-${color}-500" checked>
+                <span class="text-${color}-400 font-medium">${m.name}</span>
+            </label>`;
+        }).join('');
+    } else {
+        // Vertical layout for training tab
+        container.innerHTML = availableModels.map(m => {
+            const color = colors[m.name] || 'gray';
+            return `
+            <label class="flex items-center space-x-3 cursor-pointer p-2 hover:bg-slate-700 rounded transition">
+                <input type="checkbox" value="${m.name}" class="${checkboxClass} accent-${color}-500" checked>
+                <span class="text-${color}-400">${m.name}</span>
+            </label>`;
+        }).join('');
     }
 }
 
@@ -766,36 +848,50 @@ function updateLiveMonitor(data) {
     
     document.getElementById('packetCount').textContent = packet_id;
     
-    // Update live cards
-    ['cnn', 'lstm', 'hybrid'].forEach(name => {
-        const pred = predictions[name.charAt(0).toUpperCase() + name.slice(1)] || predictions[name.toUpperCase()];
+    // Update live cards dynamically for all models
+    Object.keys(predictions).forEach(modelName => {
+        const pred = predictions[modelName];
         if (!pred) return;
         
-        const prefix = 'live' + name.charAt(0).toUpperCase() + name.slice(1);
-        document.getElementById(`${prefix}Pred`).textContent = pred.pred === 1 ? '🔴 Attack' : '🟢 Normal';
-        document.getElementById(`${prefix}Conf`).textContent = (pred.confidence * 100).toFixed(1) + '%';
-        document.getElementById(`${prefix}Progress`).style.width = (pred.prob * 100) + '%';
-        document.getElementById(`${prefix}Status`).textContent = pred.pred === 1 ? '🔴' : '🟢';
+        const nameLower = modelName.toLowerCase();
+        const prefix = 'live' + modelName.charAt(0).toUpperCase() + modelName.slice(1);
         
-        const correct = stats[`${name}_correct`] || 0;
-        const wrong = stats[`${name}_wrong`] || 0;
-        document.getElementById(`${prefix}Correct`).textContent = correct;
-        document.getElementById(`${prefix}Wrong`).textContent = wrong;
+        // Try to update elements (they may not exist for dynamically added models)
+        const predEl = document.getElementById(`${prefix}Pred`);
+        const confEl = document.getElementById(`${prefix}Conf`);
+        const progressEl = document.getElementById(`${prefix}Progress`);
+        const statusEl = document.getElementById(`${prefix}Status`);
+        const correctEl = document.getElementById(`${prefix}Correct`);
+        const wrongEl = document.getElementById(`${prefix}Wrong`);
+        const card = document.getElementById(`liveCard${modelName}`);
+        
+        if (predEl) predEl.textContent = pred.pred === 1 ? '🔴 Attack' : '🟢 Normal';
+        if (confEl) confEl.textContent = (pred.confidence * 100).toFixed(1) + '%';
+        if (progressEl) progressEl.style.width = (pred.prob * 100) + '%';
+        if (statusEl) statusEl.textContent = pred.pred === 1 ? '🔴' : '🟢';
+        
+        const correct = stats[`${nameLower}_correct`] || 0;
+        const wrong = stats[`${nameLower}_wrong`] || 0;
+        if (correctEl) correctEl.textContent = correct;
+        if (wrongEl) wrongEl.textContent = wrong;
         
         // Add border effect
-        const card = document.getElementById(`liveCard${name.charAt(0).toUpperCase() + name.slice(1)}`);
-        if (pred.pred === 1) {
+        if (card && pred.pred === 1) {
             card.classList.add('border-red-500');
             setTimeout(() => card.classList.remove('border-red-500'), 500);
         }
     });
     
-    // Update live chart
-    if (liveChart) {
+    // Update live chart dynamically for all models
+    if (liveChart && liveChart.data.datasets.length > 0) {
         liveChart.data.labels.push(packet_id);
-        liveChart.data.datasets[0].data.push(predictions.CNN?.prob || 0);
-        liveChart.data.datasets[1].data.push(predictions.LSTM?.prob || 0);
-        liveChart.data.datasets[2].data.push(predictions.Hybrid?.prob || 0);
+        
+        // Update each dataset based on model name
+        liveChart.data.datasets.forEach((dataset) => {
+            const modelName = dataset.label;
+            const prob = predictions[modelName]?.prob || 0;
+            dataset.data.push(prob);
+        });
         
         if (liveChart.data.labels.length > 50) {
             liveChart.data.labels.shift();
@@ -805,17 +901,19 @@ function updateLiveMonitor(data) {
         liveChart.update('none');
     }
     
-    // Add to log
+    // Add to log - dynamically build model predictions
     const log = document.getElementById('trafficLog');
     const trueLbl = true_label === 1 ? '🔴 Attack' : '🟢 Normal';
+    const modelPreds = Object.keys(predictions).map(m => 
+        `<span class="ml-2">${m}: ${predictions[m]?.pred === 1 ? '🔴' : '🟢'}</span>`
+    ).join('');
+    
     const entry = document.createElement('div');
     entry.className = 'py-1 border-b border-slate-800';
     entry.innerHTML = `
         <span class="text-gray-500">#${packet_id}</span>
         <span class="ml-4">True: ${trueLbl}</span>
-        <span class="ml-4">CNN: ${predictions.CNN?.pred === 1 ? '🔴' : '🟢'}</span>
-        <span class="ml-2">LSTM: ${predictions.LSTM?.pred === 1 ? '🔴' : '🟢'}</span>
-        <span class="ml-2">Hybrid: ${predictions.Hybrid?.pred === 1 ? '🔴' : '🟢'}</span>
+        ${modelPreds}
     `;
     log.insertBefore(entry, log.firstChild);
     while (log.children.length > 100) log.removeChild(log.lastChild);
