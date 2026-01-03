@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot-IoT Multi-Model Demo</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .model-card {
+            transition: all 0.3s ease;
+        }
+        .model-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .attack-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-running { background-color: #10b981; }
+        .status-stopped { background-color: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg p-6 mb-6 text-white">
+            <h1 class="text-3xl font-bold mb-2">🛡️ Bot-IoT Multi-Model DDoS Detection</h1>
+            <p class="text-blue-100">Real-time Traffic Replay Demo - Comparing CNN, LSTM, and Hybrid Models</p>
+            <div class="mt-4 flex items-center">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText" class="font-semibold">Initializing...</span>
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4">🎮 Control Panel</h2>
+            <div class="flex gap-4 items-center flex-wrap">
+                <button onclick="startReplay()" id="startBtn" 
+                        class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition">
+                    ▶️ Start Replay
+                </button>
+                <button onclick="stopReplay()" id="stopBtn" 
+                        class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition">
+                    ⏹️ Stop Replay
+                </button>
+                <div class="flex items-center gap-2">
+                    <label class="font-semibold">Speed:</label>
+                    <select id="speedSelect" class="border rounded px-3 py-2">
+                        <option value="0.01">Fast (0.01s)</option>
+                        <option value="0.05">Medium (0.05s)</option>
+                        <option value="0.1" selected>Normal (0.1s)</option>
+                        <option value="0.5">Slow (0.5s)</option>
+                    </select>
+                </div>
+                <div class="ml-auto text-sm text-gray-600">
+                    Packets: <span id="packetCount" class="font-bold">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Model Comparison Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <!-- CNN Model -->
+            <div class="model-card bg-white rounded-lg shadow-lg p-6" id="cnnCard">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-blue-600">🧠 CNN Model</h3>
+                    <span id="cnnStatus" class="text-2xl">⚪</span>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Confidence:</span>
+                        <span id="cnnConf" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Prediction:</span>
+                        <span id="cnnPred" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-2 mt-2">
+                        <span class="text-green-600">✅ Correct:</span>
+                        <span id="cnnCorrect" class="font-bold text-green-600">0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-red-600">❌ Wrong:</span>
+                        <span id="cnnWrong" class="font-bold text-red-600">0</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-2">
+                        <span class="text-gray-600">Accuracy:</span>
+                        <span id="cnnAccuracy" class="font-bold">-</span>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="cnnProgress" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LSTM Model -->
+            <div class="model-card bg-white rounded-lg shadow-lg p-6" id="lstmCard">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-green-600">🔮 LSTM Model</h3>
+                    <span id="lstmStatus" class="text-2xl">⚪</span>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Confidence:</span>
+                        <span id="lstmConf" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Prediction:</span>
+                        <span id="lstmPred" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-2 mt-2">
+                        <span class="text-green-600">✅ Correct:</span>
+                        <span id="lstmCorrect" class="font-bold text-green-600">0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-red-600">❌ Wrong:</span>
+                        <span id="lstmWrong" class="font-bold text-red-600">0</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-2">
+                        <span class="text-gray-600">Accuracy:</span>
+                        <span id="lstmAccuracy" class="font-bold">-</span>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="lstmProgress" class="bg-green-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hybrid Model -->
+            <div class="model-card bg-white rounded-lg shadow-lg p-6" id="hybridCard">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-purple-600">⚡ Hybrid CNN-LSTM</h3>
+                    <span id="hybridStatus" class="text-2xl">⚪</span>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Confidence:</span>
+                        <span id="hybridConf" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Prediction:</span>
+                        <span id="hybridPred" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-2 mt-2">
+                        <span class="text-green-600">✅ Correct:</span>
+                        <span id="hybridCorrect" class="font-bold text-green-600">0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-red-600">❌ Wrong:</span>
+                        <span id="hybridWrong" class="font-bold text-red-600">0</span>
+                    </div>
+                    <div class="flex justify-between border-t pt-2">
+                        <span class="text-gray-600">Accuracy:</span>
+                        <span id="hybridAccuracy" class="font-bold">-</span>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="hybridProgress" class="bg-purple-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Chart -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4">📊 Real-time Confidence Comparison</h2>
+            <div style="height: 400px; max-height: 400px; position: relative;">
+                <canvas id="confidenceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <!-- Ground Truth -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold mb-4">🎯 Ground Truth</h2>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Total Packets:</span>
+                        <span id="totalPackets" class="font-bold text-2xl">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">True Normal:</span>
+                        <span id="trueNormal" class="font-bold text-green-600 text-xl">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">True Attacks:</span>
+                        <span id="trueAttacks" class="font-bold text-red-600 text-xl">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Consensus -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold mb-4">🤝 Model Consensus</h2>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Agreement (2/3):</span>
+                        <span id="consensus" class="font-bold text-2xl">0</span>
+                    </div>
+                    <div class="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                        <p class="text-sm text-yellow-800">
+                            <strong>Consensus Detection:</strong> When at least 2 out of 3 models agree on attack detection.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Traffic Log -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-bold mb-4">📝 Live Traffic Log</h2>
+            <div id="trafficLog" class="space-y-2 max-h-96 overflow-y-auto">
+                <p class="text-gray-500 text-center py-4">Waiting for replay to start...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket Connection
+        const socket = io('http://localhost:5000');
+        
+        // Chart Configuration
+        const ctx = document.getElementById('confidenceChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'CNN',
+                        data: [],
+                        borderColor: 'rgb(37, 99, 235)',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,  // Hide points for better performance
+                        pointHitRadius: 10
+                    },
+                    {
+                        label: 'LSTM',
+                        data: [],
+                        borderColor: 'rgb(34, 197, 94)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHitRadius: 10
+                    },
+                    {
+                        label: 'Hybrid',
+                        data: [],
+                        borderColor: 'rgb(168, 85, 247)',
+                        backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHitRadius: 10
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,  // Disable animation for smooth performance
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 1,
+                        title: {
+                            display: true,
+                            text: 'Attack Probability'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Packet Number (Last 50)'
+                        },
+                        ticks: {
+                            maxTicksLimit: 10  // Limit X-axis labels to reduce clutter
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    decimation: {
+                        enabled: true,
+                        algorithm: 'lttb'
+                    }
+                }
+            }
+        });
+
+        // WebSocket Event Handlers
+        socket.on('connect', () => {
+            console.log('✅ Connected to server');
+            updateStatus('Connected', true);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ Disconnected from server');
+            updateStatus('Disconnected', false);
+        });
+
+        socket.on('traffic_update', (data) => {
+            updateDashboard(data);
+        });
+
+        // Functions
+        function updateStatus(text, running) {
+            document.getElementById('statusText').textContent = text;
+            const dot = document.getElementById('statusDot');
+            dot.className = running ? 'status-dot status-running' : 'status-dot status-stopped';
+        }
+
+        function startReplay() {
+            const speed = parseFloat(document.getElementById('speedSelect').value);
+            fetch('/api/start_replay', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    csv_file: 'demo_test.csv',
+                    speed: speed
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                console.log('Replay started:', data);
+                updateStatus('Running', true);
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+            })
+            .catch(err => console.error('Error:', err));
+        }
+
+        function stopReplay() {
+            fetch('/api/stop_replay', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                console.log('Replay stopped:', data);
+                updateStatus('Stopped', false);
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+            })
+            .catch(err => console.error('Error:', err));
+        }
+
+        function updateDashboard(data) {
+            const {packet_id, true_label, predictions, stats} = data;
+            
+            // Update packet count
+            document.getElementById('packetCount').textContent = packet_id;
+            
+            // Update each model
+            updateModel('cnn', predictions.CNN, true_label);
+            updateModel('lstm', predictions.LSTM, true_label);
+            updateModel('hybrid', predictions.Hybrid, true_label);
+            
+            // Update stats
+            document.getElementById('totalPackets').textContent = stats.total_packets;
+            document.getElementById('trueNormal').textContent = stats.true_normal;
+            document.getElementById('trueAttacks').textContent = stats.true_attacks;
+            document.getElementById('consensus').textContent = stats.consensus_attacks;
+            
+            // Update correct/wrong for each model
+            updateModelStats('cnn', stats);
+            updateModelStats('lstm', stats);
+            updateModelStats('hybrid', stats);
+            
+            // Update chart
+            updateChart(packet_id, predictions);
+            
+            // Add to log
+            addToLog(packet_id, true_label, predictions);
+        }
+
+        function updateModelStats(prefix, stats) {
+            const correct = stats[`${prefix}_correct`];
+            const wrong = stats[`${prefix}_wrong`];
+            const total = correct + wrong;
+            const accuracy = total > 0 ? ((correct / total) * 100).toFixed(1) : '0.0';
+            
+            document.getElementById(`${prefix}Correct`).textContent = correct;
+            document.getElementById(`${prefix}Wrong`).textContent = wrong;
+            document.getElementById(`${prefix}Accuracy`).textContent = accuracy + '%';
+        }
+
+        function updateModel(prefix, prediction, trueLabel) {
+            const {pred, prob, confidence} = prediction;
+            
+            // Update UI
+            document.getElementById(`${prefix}Conf`).textContent = (confidence * 100).toFixed(1) + '%';
+            document.getElementById(`${prefix}Pred`).textContent = pred === 1 ? '🔴 Attack' : '🟢 Normal';
+            document.getElementById(`${prefix}Progress`).style.width = (prob * 100) + '%';
+            
+            // Update status emoji
+            const statusEmoji = pred === 1 ? '🔴' : '🟢';
+            document.getElementById(`${prefix}Status`).textContent = statusEmoji;
+            
+            // Add pulse effect on attack
+            const card = document.getElementById(`${prefix}Card`);
+            if (pred === 1) {
+                card.classList.add('attack-pulse', 'border-2', 'border-red-500');
+                setTimeout(() => {
+                    card.classList.remove('attack-pulse', 'border-2', 'border-red-500');
+                }, 2000);
+            }
+        }
+
+        function updateChart(packetId, predictions) {
+            const maxPoints = 50;  // Only keep last 50 points
+            
+            // Add new data point
+            chart.data.labels.push(packetId);
+            chart.data.datasets[0].data.push(predictions.CNN.prob);
+            chart.data.datasets[1].data.push(predictions.LSTM.prob);
+            chart.data.datasets[2].data.push(predictions.Hybrid.prob);
+            
+            // Remove oldest points if exceeding limit
+            if (chart.data.labels.length > maxPoints) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+                chart.data.datasets[1].data.shift();
+                chart.data.datasets[2].data.shift();
+            }
+            
+            // Update without animation for better performance
+            chart.update('none');
+        }
+
+        function addToLog(packetId, trueLabel, predictions) {
+            const log = document.getElementById('trafficLog');
+            
+            // Clear placeholder
+            if (log.querySelector('.text-gray-500')) {
+                log.innerHTML = '';
+            }
+            
+            const trueLabelText = trueLabel === 1 ? '🔴 Attack' : '🟢 Normal';
+            const cnnPred = predictions.CNN.pred === 1 ? '🔴' : '🟢';
+            const lstmPred = predictions.LSTM.pred === 1 ? '🔴' : '🟢';
+            const hybridPred = predictions.Hybrid.pred === 1 ? '🔴' : '🟢';
+            
+            const entry = document.createElement('div');
+            entry.className = 'p-3 bg-gray-50 rounded-lg border border-gray-200';
+            entry.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span class="font-mono text-sm">#${packetId}</span>
+                    <span class="text-sm">True: ${trueLabelText}</span>
+                    <span class="text-sm">CNN: ${cnnPred} | LSTM: ${lstmPred} | Hybrid: ${hybridPred}</span>
+                </div>
+            `;
+            
+            log.insertBefore(entry, log.firstChild);
+            
+            // Keep max 100 entries
+            while (log.children.length > 100) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        // Initialize
+        window.onload = () => {
+            document.getElementById('stopBtn').disabled = true;
+        };
+    </script>
+</body>
+</html>
