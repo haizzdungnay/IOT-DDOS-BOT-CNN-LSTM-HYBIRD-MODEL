@@ -52,6 +52,7 @@ IOT-DDOS-BOT-CNN-LSTM-HYBIRD-MODEL/
 │
 ├── backend/                        # Web demo backend
 │   ├── replay_detector.py          # Logic phát hiện đa mô hình
+│   ├── api_routes.py               # ⭐ APIs cho dashboard nâng cao
 │   └── models/                     # Model weights cho demo
 │       ├── CNN_best.pt
 │       ├── LSTM_best.pt
@@ -60,10 +61,14 @@ IOT-DDOS-BOT-CNN-LSTM-HYBIRD-MODEL/
 │       └── scaler_standard.pkl
 │
 ├── data/                           # Dữ liệu demo
-│   └── demo_test.csv               # 1000 samples cho web demo
+│   ├── demo_test.csv               # 1000 samples cho web demo
+│   └── training_history.json       # Lịch sử training/evaluation
 │
 ├── public/                         # Frontend dashboard
-│   └── index.html
+│   ├── dashboard.html              # ⭐ Advanced Dashboard mới
+│   ├── index.html                  # Demo cũ (replay only)
+│   └── static/js/
+│       └── dashboard.js            # JavaScript cho dashboard
 │
 ├── app.py                          # Flask server
 ├── requirements.txt                # Dependencies
@@ -379,7 +384,34 @@ python app.py
 
 ### Mở Dashboard
 
-Truy cập: http://localhost:5000
+- **Dashboard mới**: http://localhost:5000 (Advanced Dashboard)
+- **Demo cũ**: http://localhost:5000/old (Replay only)
+
+### ⭐ Tính Năng Dashboard Mới
+
+| Tính năng | Mô tả |
+|-----------|-------|
+| **📊 Dashboard** | Tổng quan metrics, ranking models theo FPR |
+| **🧠 Model Evaluation** | So sánh Accuracy, FPR, FNR, ROC-AUC, Confusion Matrix |
+| **📡 Real-time Monitor** | Replay traffic, theo dõi predictions thời gian thực |
+| **⚙️ Training** | Train models mới với epochs, batch size, learning rate tùy chỉnh |
+| **💾 Dataset Manager** | Xem thông tin dataset, chọn custom dataset path |
+| **⚖️ Compare Results** | So sánh kết quả cũ vs mới, tính improvement |
+| **📜 History & Reports** | Lịch sử training/evaluation, classification reports |
+
+### API Endpoints
+
+| Endpoint | Method | Mô tả |
+|----------|--------|-------|
+| `/api/models/list` | GET | Danh sách models và metrics |
+| `/api/models/evaluate` | POST | Chạy evaluation |
+| `/api/training/start` | POST | Bắt đầu training |
+| `/api/training/stop` | POST | Dừng training |
+| `/api/training/status` | GET | Trạng thái training |
+| `/api/dataset/info` | GET | Thông tin dataset |
+| `/api/history` | GET | Lịch sử training/evaluation |
+| `/api/compare` | GET | So sánh kết quả cũ/mới |
+| `/api/system/info` | GET | Thông tin hệ thống |
 
 ---
 

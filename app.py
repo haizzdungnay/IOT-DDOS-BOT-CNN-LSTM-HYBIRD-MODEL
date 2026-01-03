@@ -1,10 +1,16 @@
 """
-Flask App for Bot-IoT Multi-Model Demo
-=======================================
-Real-time Traffic Replay Dashboard for 3 Deep Learning Models
+Flask App for Bot-IoT Multi-Model Dashboard
+============================================
+Advanced Dashboard with:
+- Model Evaluation
+- Training Management
+- Real-time Monitoring
+- History & Reports
+- Dataset Management
+- Compare Results
 
 Author: IoT Security Research Team
-Date: 2026-01-02
+Date: 2026-01-03
 """
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -18,6 +24,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from backend.replay_detector import ReplayDetector
+from backend.api_routes import api
 
 # Configure logging
 logging.basicConfig(
@@ -29,6 +36,9 @@ logger = logging.getLogger('DemoApp')
 # Initialize Flask app
 app = Flask(__name__, static_folder='public')
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Register API Blueprint
+app.register_blueprint(api)
 
 # Initialize SocketIO for real-time updates
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -76,8 +86,20 @@ def broadcast_traffic_update(data):
 
 @app.route('/')
 def index():
-    """Serve main HTML page"""
+    """Serve main dashboard page"""
+    return send_from_directory('public', 'dashboard.html')
+
+
+@app.route('/old')
+def old_index():
+    """Serve old demo page"""
     return send_from_directory('public', 'index.html')
+
+
+@app.route('/static/<path:path>')
+def serve_static(path):
+    """Serve static files"""
+    return send_from_directory('public/static', path)
 
 
 @app.route('/api/status')
@@ -226,10 +248,13 @@ def internal_error(error):
 
 if __name__ == '__main__':
     logger.info("="*70)
-    logger.info("🚀 Bot-IoT Multi-Model Demo Server")
+    logger.info("🚀 Bot-IoT Advanced Dashboard Server")
     logger.info("="*70)
     logger.info(f"Models: {list(detector.models.keys()) if detector else 'Not loaded'}")
     logger.info(f"Device: {detector.device if detector else 'N/A'}")
+    logger.info("="*70)
+    logger.info("📊 Dashboard: http://localhost:5000")
+    logger.info("📊 Old Demo:  http://localhost:5000/old")
     logger.info("="*70)
     
     # Run with SocketIO
