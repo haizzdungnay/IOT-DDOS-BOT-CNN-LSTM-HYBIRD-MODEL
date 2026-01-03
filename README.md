@@ -2,149 +2,19 @@
 
 ## Giới Thiệu Dự Án
 
-Đây là hệ thống demo phát hiện tấn công DDoS trong mạng IoT (Internet of Things) sử dụng 3 mô hình Deep Learning:
+Đây là hệ thống phát hiện tấn công DDoS trong mạng IoT (Internet of Things) sử dụng 3 mô hình Deep Learning:
 
 - **CNN 1D (Convolutional Neural Network)**: Trích xuất đặc trưng không gian
 - **LSTM (Long Short-Term Memory)**: Mô hình hóa chuỗi thời gian
 - **Hybrid CNN-LSTM**: Mô hình lai kết hợp cả hai (theo chuẩn IEEE)
 
-Hệ thống phát lại (replay) traffic thực tế từ bộ dữ liệu Bot-IoT để so sánh hiệu năng của từng mô hình một cách trực quan.
+### Tính Năng Chính
 
----
-
-## Đánh Giá Dự Án
-
-### Điểm Mạnh
-
-| Tiêu chí | Đánh giá |
-|----------|----------|
-| **Kiến trúc hệ thống** | Thiết kế module rõ ràng, tách biệt backend/frontend |
-| **Giao diện người dùng** | Dashboard trực quan với biểu đồ real-time |
-| **So sánh đa mô hình** | Cho phép đánh giá song song 3 mô hình cùng lúc |
-| **Cơ chế đồng thuận** | Voting 2/3 tăng độ tin cậy của dự đoán |
-| **WebSocket** | Cập nhật real-time không cần refresh trang |
-| **Tái tạo kết quả** | Replay từ CSV đảm bảo reproducibility |
-
-### Điểm Cần Cải Thiện
-
-- Chưa có đánh giá metrics chi tiết (Precision, Recall, F1-Score)
-- Chưa hỗ trợ capture traffic thực tế
-- Chưa có tính năng export báo cáo tự động
-
----
-
-## So Sánh Kiến Trúc Các Mô Hình
-
-### 1. Mô Hình CNN 1D
-
-```
-Input: (batch_size, 20, 15) - 20 timesteps, 15 features
-
-Kiến trúc:
-├── Conv1d: 15 → 64 channels, kernel=3
-├── BatchNorm1d + ReLU + MaxPool1d(2) + Dropout(0.4)
-├── Conv1d: 64 → 128 channels, kernel=3
-├── BatchNorm1d + ReLU + MaxPool1d(2) + Dropout(0.4)
-├── Conv1d: 128 → 256 channels, kernel=3
-├── BatchNorm1d + ReLU + AdaptiveMaxPool1d(1)
-├── FC: 256 → 128 → 64
-└── Output: Sigmoid (0 = Bình thường, 1 = Tấn công)
-
-Đặc điểm:
-- Sử dụng Pooling để giảm chiều dữ liệu
-- Tốt cho trích xuất đặc trưng cục bộ
-- Không học được dependencies dài hạn
-```
-
-### 2. Mô Hình LSTM
-
-```
-Input: (batch_size, 20, 15) - 20 timesteps, 15 features
-
-Kiến trúc:
-├── LSTM Layer 1: 15 → 128 hidden units
-├── Dropout(0.3)
-├── LSTM Layer 2: 128 → 64 hidden units
-├── Dropout(0.4)
-├── FC: 64 → 64 + BatchNorm1d + ReLU
-├── FC: 64 → 32 + ReLU
-└── Output: Sigmoid (0 = Bình thường, 1 = Tấn công)
-
-Đặc điểm:
-- Học được patterns tuần tự trong traffic
-- Nhớ được thông tin dài hạn (Long-term dependencies)
-- FPR thấp nhất (~0.7%) trên Bot-IoT
-```
-
-### 3. Mô Hình Hybrid CNN-LSTM (Không Pooling)
-
-```
-Input: (batch_size, 20, 15) - 20 timesteps, 15 features
-
-Kiến trúc:
-├── CNN Block (KHÔNG có Pooling):
-│   ├── Conv1d: 15 → 64 channels, kernel=3, padding=1
-│   ├── BatchNorm1d + ReLU + Dropout(0.3)
-│   ├── Conv1d: 64 → 128 channels, kernel=3, padding=1
-│   └── BatchNorm1d + ReLU + Dropout(0.3)
-│
-├── LSTM Block:
-│   ├── LSTM: 128 → 64 hidden units, 2 layers
-│   └── Dropout(0.3)
-│
-└── Dense Block:
-    ├── FC: 64 → 32 + ReLU + Dropout(0.4)
-    └── Output: Sigmoid
-
-Đặc điểm:
-- CNN trích xuất features → LSTM học temporal patterns
-- KHÔNG có Pooling để giữ nguyên độ phân giải thời gian
-- Kết hợp ưu điểm của cả CNN và LSTM
-```
-
-### Tại Sao Không Dùng Pooling Trong Hybrid?
-
-| Hybrid với Pooling | Hybrid không Pooling |
-|--------------------|----------------------|
-| FPR cao (~12.8%) | FPR thấp (~2-3%) |
-| Mất thông tin temporal | Giữ nguyên thông tin |
-| LSTM khó học patterns | LSTM học tốt hơn |
-
----
-
-## So Sánh Phương Pháp Đánh Giá
-
-### Các Metrics Được Theo Dõi
-
-| Metric | Mô tả | Cách tính |
-|--------|-------|-----------|
-| **True Attacks** | Số mẫu tấn công thực tế | Đếm label = 1 trong ground truth |
-| **True Normal** | Số mẫu bình thường thực tế | Đếm label = 0 trong ground truth |
-| **Attacks Detected** | Số dự đoán tấn công của mỗi model | Đếm prediction = 1 |
-| **Correct/Wrong** | Số dự đoán đúng/sai | So sánh với ground truth |
-| **Consensus Attacks** | Khi ≥2/3 model đồng ý Attack | Voting system |
-
-### So Sánh Hiệu Năng Thực Tế
-
-| Model | FPR (False Positive Rate) | Đặc điểm | Đánh giá |
-|-------|---------------------------|----------|----------|
-| **LSTM** | ~0.7% | Ít báo động giả nhất | Tốt nhất cho Bot-IoT |
-| **CNN 1D** | ~1-2% | Ổn định | Phù hợp real-time |
-| **Hybrid (no pooling)** | ~2-3% | Cân bằng | Khuyến nghị cho research |
-| **Hybrid (có pooling)** | ~12.8% | Nhiều báo động giả | Không khuyến nghị |
-
-### Cơ Chế Đồng Thuận (Consensus)
-
-```python
-# Logic voting 2/3
-attack_votes = sum([model1_pred, model2_pred, model3_pred])
-if attack_votes >= 2:
-    consensus = "ATTACK"  # Độ tin cậy cao
-else:
-    consensus = "NORMAL"
-```
-
-**Ý nghĩa**: Khi ≥2 mô hình cùng dự đoán là Attack, hệ thống có độ tin cậy cao hơn so với dựa vào một mô hình đơn lẻ.
+- Training thống nhất cho cả 3 models với cùng cách đánh giá
+- Tối ưu cho GPU (CUDA) với Automatic Mixed Precision
+- Đánh giá khách quan với Confusion Matrix, Classification Report
+- Dashboard demo real-time so sánh 3 models
+- Hệ thống voting 2/3 tăng độ tin cậy
 
 ---
 
@@ -152,62 +22,32 @@ else:
 
 ```
 IOT-DDOS-BOT-CNN-LSTM-HYBIRD-MODEL/
-├── app.py                          # Flask backend với WebSocket
-├── prepare_demo_data.py            # Script chuẩn bị dữ liệu
-├── requirements.txt                # Dependencies
-├── README.md                       # Tài liệu này
-├── SETUP_GUIDE.md                  # Hướng dẫn setup chi tiết
 │
-├── backend/
+├── training/                       # Module training & evaluation
+│   ├── config.py                   # Cấu hình chung (GPU, features, hyperparameters)
+│   ├── data_loader.py              # Load và chia dữ liệu thống nhất
+│   ├── models.py                   # Định nghĩa 3 models (CNN, LSTM, Hybrid)
+│   ├── trainer.py                  # Training class với Early Stopping
+│   ├── train_all.py                # Script training tất cả models
+│   ├── evaluate.py                 # Đánh giá và so sánh models
+│   ├── visualize.py                # Vẽ biểu đồ so sánh
+│   ├── outputs/                    # Model weights và test set
+│   └── logs/                       # Training history và reports
+│
+├── backend/                        # Web demo backend
 │   ├── replay_detector.py          # Logic phát hiện đa mô hình
-│   └── models/
-│       ├── CNN_best.pt             # Trọng số CNN
-│       ├── LSTM_best.pt            # Trọng số LSTM
-│       ├── Hybrid_CNN_LSTM_best.pt # Trọng số Hybrid
-│       └── scaler_standard.pkl     # StandardScaler
+│   └── models/                     # Model weights cho demo
 │
-├── data/
-│   └── demo_test.csv               # Dữ liệu test (500 Normal + 500 Attack)
+├── data/                           # Dữ liệu
+│   └── demo_test.csv               # Dữ liệu test demo
 │
-└── public/
-    └── index.html                  # Dashboard web
+├── public/                         # Frontend dashboard
+│   └── index.html
+│
+├── app.py                          # Flask server
+├── requirements.txt                # Dependencies
+└── README.md
 ```
-
----
-
-## Bộ Dữ Liệu Bot-IoT
-
-### Nguồn Gốc
-- **Tên**: Bot-IoT Dataset
-- **Tác giả**: UNSW Canberra Cyber Security
-- **Năm**: 2018
-- **Mô tả**: Traffic giả lập từ botnet trong mạng IoT
-
-### Đặc Trưng Sử Dụng (15 Features)
-
-| # | Feature | Mô tả |
-|---|---------|-------|
-| 1 | `pkts` | Số lượng packets |
-| 2 | `bytes` | Tổng số bytes |
-| 3 | `dur` | Thời gian flow (giây) |
-| 4 | `mean` | Kích thước packet trung bình |
-| 5 | `stddev` | Độ lệch chuẩn |
-| 6 | `sum` | Tổng kích thước |
-| 7 | `min` | Kích thước nhỏ nhất |
-| 8 | `max` | Kích thước lớn nhất |
-| 9 | `spkts` | Packets từ nguồn |
-| 10 | `dpkts` | Packets từ đích |
-| 11 | `sbytes` | Bytes từ nguồn |
-| 12 | `dbytes` | Bytes từ đích |
-| 13 | `rate` | Tốc độ packet |
-| 14 | `srate` | Tốc độ nguồn |
-| 15 | `drate` | Tốc độ đích |
-
-### Phân Bố Dữ Liệu Demo
-
-- **Tổng**: 1,000 mẫu
-- **Normal (attack=0)**: 500 mẫu (50%)
-- **Attack (attack=1)**: 500 mẫu (50%)
 
 ---
 
@@ -216,114 +56,334 @@ IOT-DDOS-BOT-CNN-LSTM-HYBIRD-MODEL/
 ### Yêu Cầu Hệ Thống
 
 - Python 3.8+
-- PyTorch 2.0+
-- RAM: 4GB+
-- GPU: Tùy chọn (hỗ trợ CUDA)
+- PyTorch 2.0+ (khuyến nghị GPU)
+- RAM: 8GB+
+- GPU: NVIDIA với CUDA 11.8+ (khuyến nghị)
 
-### Bước 1: Cài Đặt Dependencies
+### Bước 1: Clone Repository
+
+```bash
+git clone https://github.com/your-repo/IOT-DDOS-BOT-CNN-LSTM-HYBIRD-MODEL.git
+cd IOT-DDOS-BOT-CNN-LSTM-HYBIRD-MODEL
+```
+
+### Bước 2: Tạo Virtual Environment
+
+```bash
+python -m venv venv
+
+# Linux/Mac
+source venv/bin/activate
+
+# Windows
+venv\Scripts\activate
+```
+
+### Bước 3: Cài Đặt PyTorch (Chọn GPU hoặc CPU)
+
+```bash
+# GPU với CUDA 11.8 (khuyến nghị)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# GPU với CUDA 12.1
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# CPU only (chậm hơn nhiều)
+pip install torch torchvision torchaudio
+```
+
+### Bước 4: Cài Đặt Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Bước 2: Chuẩn Bị Models
-
-Copy các file model vào `backend/models/`:
-- `CNN_best.pt`
-- `LSTM_best.pt`
-- `Hybrid_CNN_LSTM_best.pt`
-- `scaler_standard.pkl`
-
-### Bước 3: Chuẩn Bị Dữ Liệu
+### Bước 5: Kiểm Tra GPU
 
 ```bash
-python prepare_demo_data.py
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"None\"}')"
 ```
 
-### Bước 4: Chạy Server
+---
+
+## Hướng Dẫn Training
+
+### Training Tất Cả Models
+
+```bash
+cd training
+python train_all.py --data /path/to/botiot.csv --epochs 50
+```
+
+### Training Một Model Cụ Thể
+
+```bash
+python train_all.py --data /path/to/botiot.csv --models CNN --epochs 50
+python train_all.py --data /path/to/botiot.csv --models LSTM --epochs 50
+python train_all.py --data /path/to/botiot.csv --models Hybrid --epochs 50
+```
+
+### Kết Quả Training
+
+Sau khi training, các file sau sẽ được tạo:
+
+```
+training/
+├── outputs/
+│   ├── CNN_best.pt                 # Trọng số CNN tốt nhất
+│   ├── LSTM_best.pt                # Trọng số LSTM tốt nhất
+│   ├── Hybrid_best.pt              # Trọng số Hybrid tốt nhất
+│   ├── scaler_standard.pkl         # Scaler để chuẩn hóa dữ liệu
+│   ├── X_test.npy                  # Test set features (DÙNG CHUNG!)
+│   ├── y_test.npy                  # Test set labels (DÙNG CHUNG!)
+│   └── data_metadata.json          # Thông tin dữ liệu
+│
+└── logs/
+    ├── CNN_history.json            # Lịch sử training CNN
+    ├── LSTM_history.json           # Lịch sử training LSTM
+    ├── Hybrid_history.json         # Lịch sử training Hybrid
+    └── training_summary.json       # Tóm tắt training
+```
+
+---
+
+## Hướng Dẫn Đánh Giá Models
+
+### Đánh Giá Tất Cả Models
+
+```bash
+cd training
+python evaluate.py
+```
+
+### Kết Quả Đánh Giá
+
+```
+==================================================
+SO SANH CAC MODELS
+==================================================
+Model      Accuracy   Precision     Recall   F1-Score      FPR      FNR   Time(ms)
+----------------------------------------------------------------------------------
+CNN          0.9985      0.9982     0.9988     0.9985   0.0018   0.0012      0.152
+LSTM         0.9993      0.9990     0.9996     0.9993   0.0010   0.0004      0.245
+Hybrid       0.9991      0.9988     0.9994     0.9991   0.0012   0.0006      0.198
+----------------------------------------------------------------------------------
+```
+
+### Các Metrics Được Đánh Giá
+
+| Metric | Ý Nghĩa |
+|--------|---------|
+| **Accuracy** | Tỷ lệ dự đoán đúng tổng thể |
+| **Precision** | Tỷ lệ dự đoán Attack đúng |
+| **Recall** | Tỷ lệ phát hiện được Attack (quan trọng nhất!) |
+| **F1-Score** | Trung bình hài hòa của Precision và Recall |
+| **FPR** | False Positive Rate - Tỷ lệ báo động giả |
+| **FNR** | False Negative Rate - Tỷ lệ bỏ sót tấn công |
+
+---
+
+## Vẽ Biểu Đồ So Sánh
+
+```bash
+cd training
+python visualize.py
+```
+
+### Các Biểu Đồ Được Tạo
+
+1. **training_curves.png**: Loss và Accuracy qua các epochs
+2. **confusion_matrices.png**: Ma trận nhầm lẫn của 3 models
+3. **metrics_comparison.png**: So sánh Accuracy, Precision, Recall, F1
+4. **fpr_fnr_comparison.png**: So sánh FPR và FNR
+5. **training_time_comparison.png**: Thời gian training
+6. **summary_table.txt**: Bảng tóm tắt chi tiết
+
+---
+
+## Phân Công Công Việc Nhóm
+
+### Đồng Bộ Test Set (QUAN TRỌNG!)
+
+**CẢNH BÁO**: Tất cả thành viên PHẢI dùng chung test set để đánh giá khách quan!
+
+```bash
+# Thành viên 1: Train và tạo test set
+python train_all.py --data botiot.csv
+
+# Chia sẻ file cho các thành viên khác:
+# - training/outputs/X_test.npy
+# - training/outputs/y_test.npy
+# - training/outputs/scaler_standard.pkl
+```
+
+### Phân Công Chi Tiết
+
+| Thành Viên | Nhiệm Vụ | Model |
+|------------|----------|-------|
+| **Dương** | Train LSTM, tổng hợp kết quả vào Excel | LSTM |
+| **Thiện** | Train Hybrid, phân tích Confusion Matrix | Hybrid |
+| **Nguyên** | Train CNN, vẽ biểu đồ so sánh | CNN |
+
+### Checklist Sau Training
+
+- [ ] Lưu model weights (*.pt)
+- [ ] Lưu training history (*.json)
+- [ ] Ghi lại thời gian training
+- [ ] Chia sẻ test set cho các thành viên
+- [ ] Chạy evaluate.py trên cùng test set
+- [ ] Vẽ biểu đồ so sánh
+
+---
+
+## So Sánh Kiến Trúc Các Mô Hình
+
+### 1. CNN 1D
+
+```
+Input: (batch, 20, 15)
+├── Conv1d: 15 → 64 → 128 → 256 channels
+├── MaxPooling + BatchNorm + Dropout
+├── Global AdaptiveMaxPool
+└── FC: 256 → 128 → 64 → 1
+
+Đặc điểm: Nhanh, trích xuất features cục bộ
+```
+
+### 2. LSTM
+
+```
+Input: (batch, 20, 15)
+├── LSTM Layer 1: 15 → 128 hidden
+├── LSTM Layer 2: 128 → 64 hidden
+├── Lấy output timestep cuối
+└── FC: 64 → 64 → 32 → 1
+
+Đặc điểm: FPR thấp nhất, học temporal patterns
+```
+
+### 3. Hybrid CNN-LSTM (KHÔNG Pooling)
+
+```
+Input: (batch, 20, 15)
+├── CNN Block (KHÔNG Pooling):
+│   └── Conv1d: 15 → 64 → 128 channels
+├── LSTM Block:
+│   └── LSTM: 128 → 64 hidden, 2 layers
+└── FC: 64 → 32 → 1
+
+Đặc điểm: Kết hợp CNN + LSTM, giữ thông tin temporal
+```
+
+### Tại Sao Hybrid Không Dùng Pooling?
+
+| Hybrid với Pooling | Hybrid không Pooling |
+|--------------------|----------------------|
+| FPR ~12.8% | FPR ~2-3% |
+| Mất thông tin temporal | Giữ nguyên thông tin |
+| LSTM khó học patterns | LSTM học tốt hơn |
+
+---
+
+## Xử Lý Các Trường Hợp Đặc Biệt
+
+### Trường Hợp 1: Hybrid Kém Hơn CNN/LSTM
+
+**Nguyên nhân có thể**:
+- Overfitting do model phức tạp
+- Bot-IoT dataset quá "dễ" (CNN đã đạt 99.9%)
+
+**Giải pháp**:
+- Tăng Dropout
+- So sánh độ ổn định (Loss curve mượt hơn)
+- Nhấn mạnh training time ngắn hơn
+
+### Trường Hợp 2: Tất Cả Model Đạt 99.99%
+
+**Đây là đặc điểm của Bot-IoT** (dữ liệu rõ ràng)
+
+**Giải pháp**:
+- So sánh ở hàng phần nghìn (99.99% vs 99.95%)
+- So sánh FPR và FNR
+- So sánh thời gian training và inference
+
+### Trường Hợp 3: Training Quá Chậm
+
+**Giải pháp**:
+- Đảm bảo đang dùng GPU
+- Giảm batch size nếu hết VRAM
+- Sử dụng Mixed Precision (đã bật sẵn)
+
+---
+
+## Chạy Web Demo
+
+### Chuẩn Bị Models Cho Demo
+
+```bash
+# Copy models từ training sang backend
+cp training/outputs/*_best.pt backend/models/
+cp training/outputs/scaler_standard.pkl backend/models/
+```
+
+### Chạy Server
 
 ```bash
 python app.py
 ```
 
-Server khởi động tại: **http://localhost:5000**
+### Mở Dashboard
+
+Truy cập: http://localhost:5000
 
 ---
 
-## Hướng Dẫn Sử Dụng Dashboard
+## Talking Points Cho Hội Đồng
 
-### Bảng Điều Khiển
+### 1. Giới Thiệu
 
-| Nút | Chức năng |
-|-----|-----------|
-| **Start Replay** | Bắt đầu phát lại traffic |
-| **Stop Replay** | Dừng phát lại |
-| **Speed** | Chọn tốc độ (0.01s - 0.5s/packet) |
+> "Hệ thống so sánh 3 mô hình Deep Learning cho phát hiện DDoS trong IoT, với đánh giá khách quan trên cùng test set."
 
-### Thành Phần Dashboard
+### 2. Kết Quả
 
-1. **Model Cards**: Hiển thị dự đoán real-time của 3 mô hình
-   - Confidence (%)
-   - Prediction (Normal/Attack)
-   - Progress bar xác suất tấn công
+> "LSTM có FPR thấp nhất (0.7%), phù hợp cho production. Hybrid kết hợp ưu điểm của cả CNN và LSTM."
 
-2. **Live Chart**: Biểu đồ đường theo dõi Attack Probability
-   - Xanh dương: CNN
-   - Xanh lá: LSTM
-   - Tím: Hybrid
+### 3. Điểm Nhấn Kỹ Thuật
 
-3. **Statistics**: Thống kê Ground Truth và Consensus
+> "Hybrid không dùng Pooling để giữ thông tin temporal, giảm FPR từ 12.8% xuống 2-3%."
 
-4. **Traffic Log**: Nhật ký dự đoán từng packet
+### 4. Hướng Phát Triển
+
+> "Parallel Hybrid, Attention Mechanism, Ensemble Methods."
 
 ---
 
-## Kịch Bản Demo
+## Bộ Dữ Liệu Bot-IoT
 
-### Kịch Bản 1: Kiểm Tra Độ Chính Xác
+### Nguồn Gốc
 
-1. Bắt đầu replay với tốc độ 0.1s
-2. Theo dõi Traffic Log
-3. So sánh predictions với True Label
-4. Kết luận: LSTM có độ chính xác cao nhất
+- **Tên**: Bot-IoT Dataset
+- **Tác giả**: UNSW Canberra Cyber Security
+- **Năm**: 2018
 
-### Kịch Bản 2: Phân Tích False Positive
+### 15 Đặc Trưng Sử Dụng
 
-1. Quan sát các mẫu Normal (True = Normal)
-2. Đếm số lần model báo nhầm là Attack
-3. Kết luận: LSTM có FPR thấp nhất
-
-### Kịch Bản 3: Đánh Giá Consensus
-
-1. Theo dõi counter "Consensus Attacks"
-2. So sánh với từng model riêng lẻ
-3. Kết luận: Consensus tăng độ tin cậy
-
----
-
-## Kết Luận Và Khuyến Nghị
-
-### Kết Quả Nghiên Cứu
-
-| Mô hình | Ưu điểm | Nhược điểm | Khuyến nghị |
-|---------|---------|------------|-------------|
-| **LSTM** | FPR thấp nhất, ổn định | Chậm hơn CNN | Production |
-| **CNN 1D** | Nhanh, đơn giản | Không học temporal | Real-time |
-| **Hybrid** | Kết hợp ưu điểm | Phức tạp hơn | Research |
-
-### Đề Xuất Cải Tiến
-
-1. **Parallel Hybrid**: Chạy CNN và LSTM song song thay vì tuần tự
-2. **Attention Mechanism**: Thêm cơ chế attention để focus vào features quan trọng
-3. **Ensemble Methods**: Kết hợp nhiều mô hình với voting có trọng số
-4. **Online Learning**: Cập nhật model theo thời gian thực
+| Feature | Mô Tả |
+|---------|-------|
+| pkts | Số lượng packets |
+| bytes | Tổng bytes |
+| dur | Thời gian flow |
+| mean, stddev, sum, min, max | Thống kê packet size |
+| spkts, dpkts | Packets nguồn/đích |
+| sbytes, dbytes | Bytes nguồn/đích |
+| rate, srate, drate | Tốc độ packets |
 
 ---
 
 ## Tham Khảo
 
-1. Bot-IoT Dataset - UNSW Canberra Cyber Security (2018)
-2. IEEE Papers: CNN-LSTM for DDoS Detection
+1. Bot-IoT Dataset - UNSW Canberra (2018)
+2. IEEE Access: CNN-LSTM for DDoS Detection
 3. Scientific Reports (2025): "LSTM uses CNN's output as input"
 4. PyTorch Documentation
 
@@ -332,6 +392,10 @@ Server khởi động tại: **http://localhost:5000**
 ## Tác Giả
 
 **Nhóm Nghiên Cứu An Ninh IoT - 2026**
+
+- Dương: LSTM Model
+- Thiện: Hybrid Model
+- Nguyên: CNN Model
 
 ---
 
