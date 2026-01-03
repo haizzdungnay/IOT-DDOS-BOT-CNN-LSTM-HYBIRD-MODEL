@@ -128,6 +128,19 @@
       "dataset_path": "processed_data",
       "status": "failed",
       "duration_seconds": 12.794255
+    },
+    {
+      "id": 10,
+      "timestamp": "2026-01-03T20:24:13.631638",
+      "models": [
+        "Parallel"
+      ],
+      "epochs": 3,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "dataset_path": "processed_data",
+      "status": "completed",
+      "duration_seconds": 1092.205526
     }
   ],
   "evaluations": [
@@ -138,6 +151,30 @@
         "CNN",
         "LSTM",
         "Hybrid"
+      ],
+      "type": "evaluation",
+      "status": "failed"
+    },
+    {
+      "id": 2,
+      "timestamp": "2026-01-03T20:24:26.671728",
+      "models": [
+        "CNN",
+        "Hybrid",
+        "LSTM",
+        "Parallel"
+      ],
+      "type": "evaluation",
+      "status": "failed"
+    },
+    {
+      "id": 3,
+      "timestamp": "2026-01-03T20:33:01.824370",
+      "models": [
+        "CNN",
+        "Hybrid",
+        "LSTM",
+        "Parallel"
       ],
       "type": "evaluation",
       "status": "failed"
