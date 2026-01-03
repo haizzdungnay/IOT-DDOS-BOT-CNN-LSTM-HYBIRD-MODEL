@@ -16,15 +16,15 @@
     "total_samples": 733686,
     "total_attacks": 733591,
     "total_normal": 95,
-    "inference_time": 29.583149194717407,
-    "inference_time_per_sample": 0.040321267128877215
+    "inference_time": 41.58699059486389,
+    "inference_time_per_sample": 0.056682273608688036
   },
   "LSTM": {
     "accuracy": 0.9998705168150953,
     "precision": 0.9998705168150953,
     "recall": 1.0,
     "f1_score": 0.9999352542158024,
-    "roc_auc": 0.9560327786263232,
+    "roc_auc": 0.9560327786263234,
     "fpr": 1.0,
     "fnr": 0.0,
     "confusion_matrix": {
@@ -36,8 +36,8 @@
     "total_samples": 733686,
     "total_attacks": 733591,
     "total_normal": 95,
-    "inference_time": 23.929738998413086,
-    "inference_time_per_sample": 0.03261577704687439
+    "inference_time": 40.806949853897095,
+    "inference_time_per_sample": 0.05561909298241631
   },
   "Hybrid": {
     "accuracy": 0.9998705168150953,
@@ -56,7 +56,7 @@
     "total_samples": 733686,
     "total_attacks": 733591,
     "total_normal": 95,
-    "inference_time": 26.197874069213867,
-    "inference_time_per_sample": 0.03570720181278349
+    "inference_time": 49.88770270347595,
+    "inference_time_per_sample": 0.06799598561711134
   }
 }

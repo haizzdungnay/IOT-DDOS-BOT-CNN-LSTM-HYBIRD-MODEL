@@ -27,7 +27,7 @@ from config import (
     KEEP_FEATURES, LABEL_COLUMN, N_FEATURES,
     TIME_STEPS, STRIDE, BATCH_SIZE,
     RANDOM_STATE, TEST_SIZE, VAL_SIZE,
-    OUTPUTS_DIR, DEVICE
+    OUTPUTS_DIR, PROCESSED_DATA_DIR, DEVICE
 )
 
 
@@ -313,3 +313,129 @@ if __name__ == "__main__":
         print(f"  y_batch shape: {y_batch.shape}")
         print(f"  X_batch device: {X_batch.device}")
         break
+
+
+def load_from_processed_data(processed_dir: str = None) -> dict:
+    """
+    Load dữ liệu đã tiền xử lý sẵn từ processed_data/
+    
+    Dữ liệu này đã qua:
+    - Sliding window sequences
+    - StandardScaler
+    - Train/Val/Test split
+    
+    Args:
+        processed_dir: Thư mục chứa các file .npy
+        
+    Returns:
+        dict: train_loader, val_loader, test_loader, class_weights, config
+    """
+    import pickle
+    
+    if processed_dir is None:
+        processed_dir = PROCESSED_DATA_DIR
+    
+    processed_dir = Path(processed_dir)
+    
+    print("=" * 60)
+    print("LOAD DỮ LIỆU ĐÃ TIỀN XỬ LÝ")
+    print("=" * 60)
+    print(f"Thư mục: {processed_dir}")
+    
+    # Load arrays
+    print("\n[1] Loading numpy arrays...")
+    X_train = np.load(processed_dir / "X_train_seq.npy")
+    y_train = np.load(processed_dir / "y_train_seq.npy")
+    X_val = np.load(processed_dir / "X_val_seq.npy")
+    y_val = np.load(processed_dir / "y_val_seq.npy")
+    X_test = np.load(processed_dir / "X_test_seq.npy")
+    y_test = np.load(processed_dir / "y_test_seq.npy")
+    
+    print(f"    X_train: {X_train.shape}")
+    print(f"    X_val:   {X_val.shape}")
+    print(f"    X_test:  {X_test.shape}")
+    
+    # Class distribution
+    print("\n[2] Phân bố lớp:")
+    for name, y in [("Train", y_train), ("Val", y_val), ("Test", y_test)]:
+        n_normal = (y == 0).sum()
+        n_attack = (y == 1).sum()
+        total = len(y)
+        print(f"    {name}: Normal={n_normal:,} ({n_normal/total*100:.2f}%), Attack={n_attack:,} ({n_attack/total*100:.2f}%)")
+    
+    # Load config
+    print("\n[3] Loading config...")
+    config = None
+    config_path = processed_dir / "config.pkl"
+    if config_path.exists():
+        with open(config_path, 'rb') as f:
+            config = pickle.load(f)
+        print(f"    Time steps: {config.get('time_steps', 20)}")
+        print(f"    Features: {config.get('n_features', 15)}")
+    
+    # Load class weights
+    print("\n[4] Loading class weights...")
+    class_weights = None
+    weights_path = processed_dir / "class_weights.pkl"
+    if weights_path.exists():
+        with open(weights_path, 'rb') as f:
+            class_weights = pickle.load(f)
+        print(f"    Normal weight: {class_weights.get(0, 1.0):.4f}")
+        print(f"    Attack weight: {class_weights.get(1, 1.0):.4f}")
+    
+    # Create DataLoaders
+    print("\n[5] Tạo DataLoaders...")
+    use_cuda = torch.cuda.is_available()
+    num_workers = 4 if use_cuda else 0
+    pin_memory = use_cuda
+    
+    train_dataset = BotIoTDataset(X_train, y_train.astype(np.float32))
+    val_dataset = BotIoTDataset(X_val, y_val.astype(np.float32))
+    test_dataset = BotIoTDataset(X_test, y_test.astype(np.float32))
+    
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=True
+    )
+    
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory
+    )
+    
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory
+    )
+    
+    print(f"    Train batches: {len(train_loader)}")
+    print(f"    Val batches:   {len(val_loader)}")
+    print(f"    Test batches:  {len(test_loader)}")
+    
+    print("\n" + "=" * 60)
+    print("HOÀN THÀNH LOAD DỮ LIỆU!")
+    print("=" * 60)
+    
+    return {
+        "train_loader": train_loader,
+        "val_loader": val_loader,
+        "test_loader": test_loader,
+        "X_train": X_train,
+        "y_train": y_train,
+        "X_val": X_val,
+        "y_val": y_val,
+        "X_test": X_test,
+        "y_test": y_test,
+        "class_weights": class_weights,
+        "config": config
+    }

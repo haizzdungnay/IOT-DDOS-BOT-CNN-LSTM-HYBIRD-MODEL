@@ -267,6 +267,87 @@ class HybridCNNLSTM(nn.Module):
 
 
 # =============================================================================
+# PARALLEL HYBRID CNN-LSTM MODEL
+# =============================================================================
+class ParallelHybridCNNLSTM(nn.Module):
+    """
+    Parallel Hybrid: CNN và LSTM chạy song song, concatenate features
+    
+    Kiến trúc:
+    - LSTM Branch: học temporal patterns trực tiếp từ input
+    - CNN Branch: trích xuất spatial features
+    - Fusion: concatenate → FC layers
+    """
+    
+    def __init__(self, n_features: int = N_FEATURES,
+                 time_steps: int = TIME_STEPS):
+        super(ParallelHybridCNNLSTM, self).__init__()
+        
+        self.n_features = n_features
+        self.time_steps = time_steps
+        
+        # LSTM Branch
+        self.lstm = nn.LSTM(
+            input_size=n_features,
+            hidden_size=64,
+            num_layers=2,
+            batch_first=True,
+            dropout=0.3,
+            bidirectional=False
+        )
+        self.lstm_dropout = nn.Dropout(0.3)
+        
+        # CNN Branch
+        self.conv1 = nn.Conv1d(n_features, 64, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.pool1 = nn.MaxPool1d(2)
+        
+        self.conv2 = nn.Conv1d(64, 128, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm1d(128)
+        self.pool2 = nn.MaxPool1d(2)
+        
+        self.cnn_dropout = nn.Dropout(0.3)
+        self.relu = nn.ReLU()
+        
+        # Fusion layers
+        lstm_feat_dim = 64
+        cnn_feat_dim = 128 * (time_steps // 4)
+        combined_dim = lstm_feat_dim + cnn_feat_dim
+        
+        self.fc1 = nn.Linear(combined_dim, 128)
+        self.bn_fc = nn.BatchNorm1d(128)
+        self.fc_dropout = nn.Dropout(0.4)
+        self.fc_out = nn.Linear(128, 1)
+    
+    def forward(self, x):
+        # LSTM branch
+        lstm_out, _ = self.lstm(x)
+        lstm_feat = lstm_out[:, -1, :]  # Last timestep
+        lstm_feat = self.lstm_dropout(lstm_feat)
+        
+        # CNN branch
+        cnn_in = x.permute(0, 2, 1)
+        cnn_out = self.relu(self.bn1(self.conv1(cnn_in)))
+        cnn_out = self.pool1(cnn_out)
+        cnn_out = self.cnn_dropout(cnn_out)
+        
+        cnn_out = self.relu(self.bn2(self.conv2(cnn_out)))
+        cnn_out = self.pool2(cnn_out)
+        cnn_out = self.cnn_dropout(cnn_out)
+        cnn_feat = cnn_out.flatten(1)
+        
+        # Concatenate features
+        combined = torch.cat((lstm_feat, cnn_feat), dim=1)
+        
+        # FC layers
+        out = self.relu(self.bn_fc(self.fc1(combined)))
+        out = self.fc_dropout(out)
+        out = self.fc_out(out)
+        
+        return out.squeeze(-1)
+
+
+# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 def get_model(model_name: str, n_features: int = N_FEATURES,
@@ -275,7 +356,7 @@ def get_model(model_name: str, n_features: int = N_FEATURES,
     Factory function de tao model
 
     Args:
-        model_name: 'CNN', 'LSTM', hoac 'Hybrid'
+        model_name: 'CNN', 'LSTM', 'Hybrid', or 'Parallel'
         n_features: So features
         time_steps: So timesteps
 
@@ -285,7 +366,8 @@ def get_model(model_name: str, n_features: int = N_FEATURES,
     models = {
         'CNN': CNN1D,
         'LSTM': LSTMModel,
-        'Hybrid': HybridCNNLSTM
+        'Hybrid': HybridCNNLSTM,
+        'Parallel': ParallelHybridCNNLSTM
     }
 
     if model_name not in models:

@@ -24,6 +24,7 @@ DATA_DIR = BASE_DIR / "data"
 MODELS_DIR = BASE_DIR / "backend" / "models"
 OUTPUTS_DIR = BASE_DIR / "training" / "outputs"
 LOGS_DIR = BASE_DIR / "training" / "logs"
+PROCESSED_DATA_DIR = BASE_DIR / "processed_data"  # New: preprocessed npy files
 
 # Tao thu muc neu chua ton tai
 OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -111,6 +112,7 @@ MIN_DELTA = 1e-4     # Nguong cai thien toi thieu
 # MODEL NAMES
 # =============================================================================
 MODEL_NAMES = ['CNN', 'LSTM', 'Hybrid']
+MODEL_NAMES_ALL = ['CNN', 'LSTM', 'Hybrid', 'Parallel']  # Include Parallel Hybrid
 
 # =============================================================================
 # PRINT CONFIG

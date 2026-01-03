@@ -86,22 +86,31 @@ class Trainer:
                  device: torch.device = DEVICE,
                  learning_rate: float = LEARNING_RATE,
                  weight_decay: float = WEIGHT_DECAY,
-                 use_amp: bool = True):
+                 use_amp: bool = True,
+                 class_weights: dict = None):
         """
         Args:
             model: PyTorch model
-            model_name: Ten model ('CNN', 'LSTM', 'Hybrid')
+            model_name: Ten model ('CNN', 'LSTM', 'Hybrid', 'Parallel')
             device: cuda hoac cpu
             learning_rate: Learning rate
             weight_decay: L2 regularization
             use_amp: Su dung Automatic Mixed Precision (chi GPU)
+            class_weights: Dict {0: weight_normal, 1: weight_attack} for imbalanced data
         """
         self.model = model.to(device)
         self.model_name = model_name
         self.device = device
 
-        # Loss function (Binary Cross Entropy with Logits)
-        self.criterion = nn.BCEWithLogitsLoss()
+        # Loss function with optional class weights
+        if class_weights is not None:
+            # pos_weight = weight_attack / weight_normal (for BCEWithLogitsLoss)
+            pos_weight = torch.tensor([class_weights[1] / class_weights[0]]).to(device)
+            self.criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+            print(f"[Trainer] Class weights: Normal={class_weights[0]:.4f}, Attack={class_weights[1]:.4f}")
+            print(f"[Trainer] pos_weight: {pos_weight.item():.6f}")
+        else:
+            self.criterion = nn.BCEWithLogitsLoss()
 
         # Optimizer (AdamW tot hon Adam cho regularization)
         self.optimizer = optim.AdamW(

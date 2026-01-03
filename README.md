@@ -2,18 +2,21 @@
 
 ## Giới Thiệu Dự Án
 
-Đây là hệ thống phát hiện tấn công DDoS trong mạng IoT (Internet of Things) sử dụng 3 mô hình Deep Learning:
+Đây là hệ thống phát hiện tấn công DDoS trong mạng IoT (Internet of Things) sử dụng 4 mô hình Deep Learning:
 
 - **CNN 1D (Convolutional Neural Network)**: Trích xuất đặc trưng không gian
 - **LSTM (Long Short-Term Memory)**: Mô hình hóa chuỗi thời gian
-- **Hybrid CNN-LSTM**: Mô hình lai kết hợp cả hai (theo chuẩn IEEE)
+- **Hybrid CNN-LSTM**: Mô hình lai tuần tự CNN → LSTM (theo chuẩn IEEE)
+- **Parallel Hybrid**: CNN và LSTM song song, concatenate features
 
 ### Tính Năng Chính
 
-- Training thống nhất cho cả 3 models với cùng cách đánh giá
+- Training thống nhất cho cả 4 models với cùng cách đánh giá
+- Hỗ trợ dữ liệu đã tiền xử lý (processed_data/) hoặc CSV gốc
+- Class weights cho dữ liệu mất cân bằng
 - Tối ưu cho GPU (CUDA) với Automatic Mixed Precision
 - Đánh giá khách quan với Confusion Matrix, Classification Report
-- Dashboard demo real-time so sánh 3 models
+- Dashboard demo real-time so sánh các models
 - Hệ thống voting 2/3 tăng độ tin cậy
 
 ---
@@ -23,13 +26,26 @@
 ```
 IOT-DDOS-BOT-CNN-LSTM-HYBIRD-MODEL/
 │
+├── processed_data/                 # ⭐ Dữ liệu đã tiền xử lý (sequences, scaled)
+│   ├── X_train_seq.npy             # Train features (2.1M samples)
+│   ├── y_train_seq.npy             # Train labels
+│   ├── X_val_seq.npy               # Validation features
+│   ├── y_val_seq.npy               # Validation labels
+│   ├── X_test_seq.npy              # Test features (450K samples)
+│   ├── y_test_seq.npy              # Test labels
+│   ├── config.pkl                  # Cấu hình (time_steps, features)
+│   ├── class_weights.pkl           # Weights cho imbalanced data
+│   └── scaler_standard.pkl         # StandardScaler
+│
 ├── training/                       # Module training & evaluation
 │   ├── config.py                   # Cấu hình chung (GPU, features, hyperparameters)
-│   ├── data_loader.py              # Load và chia dữ liệu thống nhất
-│   ├── models.py                   # Định nghĩa 3 models (CNN, LSTM, Hybrid)
-│   ├── trainer.py                  # Training class với Early Stopping
-│   ├── train_all.py                # Script training tất cả models
-│   ├── evaluate.py                 # Đánh giá và so sánh models
+│   ├── data_loader.py              # Load dữ liệu (CSV hoặc .npy)
+│   ├── models.py                   # Định nghĩa 4 models (CNN, LSTM, Hybrid, Parallel)
+│   ├── trainer.py                  # Training class với Early Stopping + Class Weights
+│   ├── train_processed.py          # ⭐ Train với dữ liệu đã xử lý
+│   ├── train_all.py                # Train từ CSV gốc
+│   ├── evaluate_processed.py       # ⭐ Đánh giá với processed data
+│   ├── evaluate.py                 # Đánh giá cũ
 │   ├── visualize.py                # Vẽ biểu đồ so sánh
 │   ├── outputs/                    # Model weights và test set
 │   └── logs/                       # Training history và reports
@@ -37,17 +53,22 @@ IOT-DDOS-BOT-CNN-LSTM-HYBIRD-MODEL/
 ├── backend/                        # Web demo backend
 │   ├── replay_detector.py          # Logic phát hiện đa mô hình
 │   └── models/                     # Model weights cho demo
+│       ├── CNN_best.pt
+│       ├── LSTM_best.pt
+│       ├── Hybrid_CNN_LSTM_best.pt
+│       ├── Parallel_Hybrid_best.pt
+│       └── scaler_standard.pkl
 │
-├── data/                           # Dữ liệu
-│   └── demo_test.csv               # Dữ liệu test demo
+├── data/                           # Dữ liệu demo
+│   └── demo_test.csv               # 1000 samples cho web demo
 │
 ├── public/                         # Frontend dashboard
 │   └── index.html
 │
 ├── app.py                          # Flask server
 ├── requirements.txt                # Dependencies
+├── RUN_GUIDE.md                    # Hướng dẫn chạy nhanh
 └── README.md
-```
 
 ---
 
@@ -70,13 +91,13 @@ cd IOT-DDOS-BOT-CNN-LSTM-HYBIRD-MODEL
 ### Bước 2: Tạo Virtual Environment
 
 ```bash
-python -m venv venv
+python -m venv .venv
 
 # Linux/Mac
-source venv/bin/activate
+source .venv/bin/activate
 
 # Windows
-venv\Scripts\activate
+.venv\Scripts\activate
 ```
 
 ### Bước 3: Cài Đặt PyTorch (Chọn GPU hoặc CPU)
@@ -108,14 +129,37 @@ python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); 
 
 ## Hướng Dẫn Training
 
-### Training Tất Cả Models
+### ⭐ Training với Dữ Liệu Đã Xử Lý (Khuyến Nghị)
+
+Sử dụng dữ liệu từ `processed_data/` (đã có sẵn sequences, scaled, class weights):
+
+```bash
+cd training
+
+# Train tất cả models với class weights
+python train_processed.py
+
+# Train model cụ thể
+python train_processed.py --models CNN
+python train_processed.py --models LSTM
+python train_processed.py --models Hybrid
+python train_processed.py --models Parallel
+
+# Tùy chỉnh epochs
+python train_processed.py --epochs 30 --models LSTM
+
+# Không dùng class weights (không khuyến nghị cho dữ liệu mất cân bằng)
+python train_processed.py --no-weights
+```
+
+### Training từ CSV Gốc
 
 ```bash
 cd training
 python train_all.py --data /path/to/botiot.csv --epochs 50
 ```
 
-### Training Một Model Cụ Thể
+### Training Một Model Cụ Thể (CSV)
 
 ```bash
 python train_all.py --data /path/to/botiot.csv --models CNN --epochs 50
@@ -149,25 +193,26 @@ training/
 
 ## Hướng Dẫn Đánh Giá Models
 
-### Đánh Giá Tất Cả Models
+### ⭐ Đánh Giá với Processed Data (Khuyến Nghị)
+
+```bash
+cd training
+
+# Đánh giá tất cả models
+python evaluate_processed.py
+
+# Đánh giá model cụ thể
+python evaluate_processed.py --models CNN LSTM
+
+# Dùng models từ backend/models
+python evaluate_processed.py --model-dir ../backend/models
+```
+
+### Đánh Giá Cũ (với test set từ training/outputs)
 
 ```bash
 cd training
 python evaluate.py
-```
-
-### Kết Quả Đánh Giá
-
-```
-==================================================
-SO SANH CAC MODELS
-==================================================
-Model      Accuracy   Precision     Recall   F1-Score      FPR      FNR   Time(ms)
-----------------------------------------------------------------------------------
-CNN          0.9985      0.9982     0.9988     0.9985   0.0018   0.0012      0.152
-LSTM         0.9993      0.9990     0.9996     0.9993   0.0010   0.0004      0.245
-Hybrid       0.9991      0.9988     0.9994     0.9991   0.0012   0.0006      0.198
-----------------------------------------------------------------------------------
 ```
 
 ### Các Metrics Được Đánh Giá

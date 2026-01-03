@@ -16,55 +16,75 @@
   pip install -r requirements.txt
   ```
 
-## 1) Chuẩn Bị Dữ Liệu
-- Nếu đã có file merge đầy đủ (có cột `attack`), ví dụ: `E:/Bot_IOT_Dataset/Dataset/Dataset/Entire Dataset/UNSW_2018_IoT_Botnet_Entire_Merged.csv`.
-- Tuỳ chọn (khuyến nghị): Tạo tập cân bằng nhỏ để train/đánh giá có ý nghĩa hơn:
-  ```powershell
-  python training/create_balanced_subset.py --source "E:/.../UNSW_2018_IoT_Botnet_Entire_Merged.csv" --normal_target 50000 --attack_target 50000 --chunksize 200000
-  ```
-  Kết quả lưu trong `training/outputs/balanced/` (train/val/test CSV + class_weights).
+## 1) Chạy Training (Khuyến nghị: dùng dữ liệu đã xử lý)
 
-## 2) Chạy Training
-- Vào thư mục training:
-  ```powershell
-  cd training
-  ```
-- Train tất cả models trên file dữ liệu bạn chọn (ưu tiên file cân bằng nếu đã tạo):
-  ```powershell
-  python train_all.py --data "E:/.../UNSW_2018_IoT_Botnet_Entire_Merged.csv" --epochs 30
-  ```
-  Hoặc train riêng từng model: thêm `--models CNN` hoặc `--models LSTM` hoặc `--models Hybrid`.
-- Kết quả chính nằm ở `training/outputs/` (weights *_best.pt, scaler_standard.pkl, X_test.npy, y_test.npy) và `training/logs/` (history, reports).
+Dữ liệu đã được tiền xử lý sẵn trong `processed_data/` (sequences, scaled, class weights).
 
-## 3) Đánh Giá
-- Sau khi train xong (vẫn ở thư mục training):
-  ```powershell
-  python evaluate.py
-  ```
-- Kết quả: `training/logs/evaluation_results.json` và các `*_classification_report.txt` trong `training/logs/`.
+```powershell
+cd training
 
-## 4) Chuẩn Bị Cho Web Demo
-- Copy các file sau vào `backend/models/`:
-  - `training/outputs/CNN_best.pt`
-  - `training/outputs/LSTM_best.pt`
-  - `training/outputs/Hybrid_best.pt` (hoặc tên tương ứng)
-  - `training/outputs/scaler_standard.pkl`
+# Train tất cả models (CNN, LSTM, Hybrid) với class weights
+python train_processed.py
+
+# Train model cụ thể
+python train_processed.py --models LSTM
+
+# Train Parallel Hybrid
+python train_processed.py --models Parallel
+
+# Tùy chỉnh epochs
+python train_processed.py --epochs 30 --models CNN
+```
+
+### Hoặc: Training từ CSV gốc (nếu có file CSV)
+```powershell
+cd training
+python train_all.py --data /path/to/botiot.csv --epochs 50
+```
+
+## 2) Đánh Giá Models
+
+```powershell
+cd training
+
+# Đánh giá với processed test data
+python evaluate_processed.py
+
+# Đánh giá model cụ thể
+python evaluate_processed.py --models CNN LSTM
+
+# Dùng models từ backend/models
+python evaluate_processed.py --model-dir ../backend/models
+```
+
+Kết quả: `training/logs/evaluation_results_processed.json` và `*_classification_report_processed.txt`.
+
+## 3) Chuẩn Bị Cho Web Demo
+
+- Các model weights đã có sẵn trong `backend/models/`:
+  - `CNN_best.pt`, `LSTM_best.pt`, `Hybrid_CNN_LSTM_best.pt`, `Parallel_Hybrid_best.pt`
+  - `scaler_standard.pkl`
+
+- Nếu vừa train xong, copy từ `training/outputs/` sang `backend/models/`.
+
 - Tạo dữ liệu demo nhỏ (nếu chưa có `data/demo_test.csv`):
   ```powershell
   cd ..   # quay lại root
   python prepare_demo_data.py
   ```
-  (Tạo 500 Normal + 500 Attack mẫu demo.)
 
-## 5) Chạy Web
-- Ở thư mục gốc (đảm bảo đã kích hoạt venv):
-  ```powershell
-  python app.py
-  ```
-- Mở trình duyệt: http://localhost:5000
-- Nút Start/Stop điều khiển replay; xem realtime dashboard.
+## 4) Chạy Web Demo
 
-## 6) Ghi Chú Nhanh
+```powershell
+# Ở thư mục gốc (đảm bảo đã kích hoạt venv)
+python app.py
+```
+
+Mở trình duyệt: http://localhost:5000
+
+Nhấn "Start Replay" để xem dashboard real-time.
+
+## 5) Ghi Chú
 - Nếu muốn ép chạy CPU: chỉnh `self.device = torch.device('cpu')` trong `backend/replay_detector.py`.
-- Nếu thiếu bộ nhớ khi merge dữ liệu lớn: dùng `merge_entire_streaming.py` (đọc chunk, ghi thẳng ra file).
-- Để đánh giá có ý nghĩa (tránh FPR=1.0): dùng tập cân bằng hoặc class weights từ `training/outputs/balanced/class_weights.json`.
+- Dữ liệu rất mất cân bằng (99.6% Attack). Dùng `train_processed.py` với class weights để cải thiện.
+- Models trong `backend/models/` dùng cho web demo; models trong `training/outputs/` là kết quả training mới.
