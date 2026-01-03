@@ -171,6 +171,21 @@
       "dataset_path": "processed_data",
       "status": "failed",
       "duration_seconds": 23.16704
+    },
+    {
+      "id": 13,
+      "timestamp": "2026-01-04T06:48:13.297404",
+      "models": [
+        "CNN",
+        "Hybrid",
+        "LSTM"
+      ],
+      "epochs": 30,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "dataset_path": "processed_data",
+      "status": "failed",
+      "duration_seconds": 5.099912
     }
   ],
   "evaluations": [

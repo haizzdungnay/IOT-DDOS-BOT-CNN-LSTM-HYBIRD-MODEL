@@ -817,7 +817,7 @@ async function clearHistory() {
 function startReplay() {
     const speed = parseFloat(document.getElementById('speedSelect').value);
     
-    fetch('/api/start_replay', {
+    fetch('/api/replay/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ csv_file: 'demo_test.csv', speed })
@@ -833,7 +833,7 @@ function startReplay() {
 }
 
 function stopReplay() {
-    fetch('/api/stop_replay', { method: 'POST' })
+    fetch('/api/replay/stop', { method: 'POST' })
     .then(r => r.json())
     .then(data => {
         showToast('Replay stopped', 'success');

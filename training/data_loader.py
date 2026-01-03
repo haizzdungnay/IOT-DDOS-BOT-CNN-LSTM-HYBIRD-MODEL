@@ -213,7 +213,8 @@ def load_and_preprocess_data(csv_path: str,
 
     # Kiem tra co GPU khong de bat pin_memory
     use_cuda = torch.cuda.is_available()
-    num_workers = 4 if use_cuda else 0  # Parallel data loading
+    # num_workers=0 on Windows to avoid multiprocessing issues
+    num_workers = 0
     pin_memory = use_cuda  # Faster GPU transfer
 
     train_dataset = BotIoTDataset(X_train_final, y_train_final)
@@ -297,7 +298,7 @@ def load_test_set_only(test_dir: str = None) -> tuple:
         test_dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=4 if use_cuda else 0,
+        num_workers=0,  # Avoid multiprocessing issues on Windows
         pin_memory=use_cuda
     )
 
@@ -400,7 +401,7 @@ def load_from_processed_data(processed_dir: str = None, batch_size: int = None) 
     print("\n[5] Creating DataLoaders...")
     print(f"    Batch size: {batch_size}")
     use_cuda = torch.cuda.is_available()
-    num_workers = 4 if use_cuda else 0
+    num_workers = 0  # Avoid multiprocessing issues on Windows
     pin_memory = use_cuda
     
     train_dataset = BotIoTDataset(X_train, y_train.astype(np.float32))
