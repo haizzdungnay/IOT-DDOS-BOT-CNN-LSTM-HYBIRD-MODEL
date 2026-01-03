@@ -25,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import (
-    DEVICE, EPOCHS, MODEL_NAMES_ALL, OUTPUTS_DIR, LOGS_DIR, PROCESSED_DATA_DIR
+    DEVICE, EPOCHS, BATCH_SIZE, LEARNING_RATE, MODEL_NAMES_ALL, OUTPUTS_DIR, LOGS_DIR, PROCESSED_DATA_DIR
 )
 from data_loader import load_from_processed_data
 from models import get_model, count_parameters
@@ -36,6 +36,7 @@ def train_single_model(model_name: str,
                        train_loader,
                        val_loader,
                        epochs: int,
+                       learning_rate: float = 0.001,
                        class_weights: dict = None) -> dict:
     """Train một model với class weights tùy chọn"""
     print(f"\n{'#' * 60}")
@@ -46,9 +47,10 @@ def train_single_model(model_name: str,
     model = get_model(model_name)
     n_params = count_parameters(model)
     print(f"Parameters: {n_params:,}")
+    print(f"Learning rate: {learning_rate}")
 
-    # Create trainer with class weights
-    trainer = Trainer(model, model_name, class_weights=class_weights)
+    # Create trainer with class weights and learning rate
+    trainer = Trainer(model, model_name, learning_rate=learning_rate, class_weights=class_weights)
 
     # Train
     start_time = time.time()
@@ -73,6 +75,10 @@ def main():
                         help='Models to train')
     parser.add_argument('--epochs', type=int, default=EPOCHS,
                         help='Number of epochs')
+    parser.add_argument('--batch-size', type=int, default=BATCH_SIZE,
+                        help='Batch size for training')
+    parser.add_argument('--lr', type=float, default=LEARNING_RATE,
+                        help='Learning rate')
     parser.add_argument('--data-dir', type=str, default=str(PROCESSED_DATA_DIR),
                         help='Directory containing processed data')
     parser.add_argument('--no-weights', action='store_true',
@@ -84,13 +90,15 @@ def main():
     print("=" * 60)
     print(f"Models: {args.models}")
     print(f"Epochs: {args.epochs}")
+    print(f"Batch size: {args.batch_size}")
+    print(f"Learning rate: {args.lr}")
     print(f"Data dir: {args.data_dir}")
     print(f"Device: {DEVICE}")
     print(f"Use class weights: {not args.no_weights}")
     print("=" * 60)
 
     # Load processed data
-    data = load_from_processed_data(args.data_dir)
+    data = load_from_processed_data(args.data_dir, batch_size=args.batch_size)
     train_loader = data['train_loader']
     val_loader = data['val_loader']
     class_weights = None if args.no_weights else data.get('class_weights')
@@ -102,7 +110,7 @@ def main():
     for model_name in args.models:
         result = train_single_model(
             model_name, train_loader, val_loader,
-            args.epochs, class_weights
+            args.epochs, args.lr, class_weights
         )
         results[model_name] = result
 
@@ -110,7 +118,7 @@ def main():
 
     # Summary
     print("\n" + "=" * 60)
-    print("TÓM TẮT KẾT QUẢ TRAINING")
+    print("TRAINING RESULTS SUMMARY")
     print("=" * 60)
     print(f"{'Model':<10} {'Params':>12} {'Best Loss':>12} {'Best Acc':>12} {'Time (s)':>12}")
     print("-" * 60)
@@ -149,7 +157,7 @@ def main():
     print(f"\nSummary saved: {summary_path}")
 
     print("\n" + "=" * 60)
-    print("HOÀN THÀNH TRAINING!")
+    print("TRAINING COMPLETED!")
     print("=" * 60)
     print(f"Model weights: {OUTPUTS_DIR}")
     print(f"Logs: {LOGS_DIR}")

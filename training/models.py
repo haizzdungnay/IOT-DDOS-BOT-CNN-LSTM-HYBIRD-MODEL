@@ -20,7 +20,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from config import N_FEATURES, TIME_STEPS
+try:
+    from .config import N_FEATURES, TIME_STEPS
+except ImportError:
+    from config import N_FEATURES, TIME_STEPS
 
 
 # =============================================================================

@@ -160,7 +160,7 @@ class ModelEvaluator:
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate models with processed data')
-    parser.add_argument('--models', nargs='+', default=['CNN', 'LSTM', 'Hybrid'],
+    parser.add_argument('--models', nargs='+', default=['CNN', 'LSTM', 'Hybrid', 'Parallel'],
                         choices=MODEL_NAMES_ALL, help='Models to evaluate')
     parser.add_argument('--data-dir', type=str, default=str(PROCESSED_DATA_DIR),
                         help='Directory containing processed data')
@@ -201,10 +201,23 @@ def main():
                   f"{m['fpr']:>8.4f} {m['fnr']:>8.4f}")
         print("-" * 70)
 
-    # Save results
+    # Save results - merge with existing results
     results_path = LOGS_DIR / "evaluation_results_processed.json"
+    
+    # Load existing results if file exists
+    existing_results = {}
+    if results_path.exists():
+        try:
+            with open(results_path, 'r') as f:
+                existing_results = json.load(f)
+        except Exception:
+            pass
+    
+    # Merge new results with existing
+    existing_results.update(all_results)
+    
     with open(results_path, 'w') as f:
-        json.dump(all_results, f, indent=2)
+        json.dump(existing_results, f, indent=2)
     print(f"\nResults saved: {results_path}")
 
 

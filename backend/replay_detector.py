@@ -114,53 +114,84 @@ class ReplayDetector:
     
     def _load_models(self):
         """
-        Load PyTorch models từ training module
-
-        Model configs:
-        - CNN: CNN1D → CNN_best.pt
-        - LSTM: LSTMModel → LSTM_best.pt
-        - Hybrid: HybridCNNLSTM → Hybrid_CNN_LSTM_best.pt
-
-        Note: Parallel_Hybrid và Hybrid dùng chung weights (Hybrid_CNN_LSTM_best.pt)
+        Dynamically load all PyTorch models from the models directory.
+        
+        Supports automatic detection of model type from filename:
+        - *CNN*.pt → CNN1D
+        - *LSTM*.pt (not hybrid) → LSTMModel  
+        - *LSTM_CNN*.pt → HybridLSTMCNN (LSTM → CNN architecture)
+        - *Hybrid_CNN_LSTM*.pt or *CNN_LSTM*.pt → HybridCNNLSTM (CNN → LSTM)
+        - *Parallel*.pt → ParallelHybridCNNLSTM
         """
         self.models = {}
-
-        # Model configurations: name -> (model_type, weight_file)
-        model_configs = {
-            'CNN': ('CNN', 'CNN_best.pt'),
-            'LSTM': ('LSTM', 'LSTM_best.pt'),
-            'Hybrid': ('Hybrid', 'Hybrid_CNN_LSTM_best.pt'),
-        }
-
-        for display_name, (model_type, filename) in model_configs.items():
-            model_path = Path(self.models_dir) / filename
-
-            if not model_path.exists():
-                logger.warning(f"⚠️  Model file not found: {model_path}")
+        
+        import glob
+        import os
+        
+        # Get all .pt files
+        all_model_files = glob.glob(f"{self.models_dir}/*.pt") + glob.glob(f"{self.models_dir}/*.pth")
+        
+        if not all_model_files:
+            logger.warning(f"⚠️  No model files found in {self.models_dir}")
+            return
+        
+        logger.info(f"📂 Found {len(all_model_files)} model files in {self.models_dir}")
+        
+        # Model class mapping based on filename patterns
+        def detect_model_class(filename):
+            """Detect model class and name from filename"""
+            basename = os.path.basename(filename).lower()
+            
+            # Order matters - check more specific patterns first
+            if 'parallel' in basename:
+                return 'Parallel', ParallelHybridCNNLSTM
+            elif 'lstm_cnn' in basename:
+                return 'Hybrid_LSTM_CNN', HybridLSTMCNN
+            elif 'hybrid_cnn_lstm' in basename or 'cnn_lstm' in basename:
+                return 'Hybrid', HybridCNNLSTM
+            elif 'hybrid' in basename:
+                # Hybrid_best.pt - use ParallelHybridCNNLSTM architecture
+                return 'Hybrid', ParallelHybridCNNLSTM
+            elif 'lstm' in basename and 'cnn' not in basename:
+                return 'LSTM', LSTMModel
+            elif 'cnn' in basename and 'lstm' not in basename:
+                return 'CNN', CNN1D
+            else:
+                # Unknown type - try to extract name from filename
+                name = os.path.splitext(os.path.basename(filename))[0]
+                name = name.replace('_best', '').replace('_', ' ').title().replace(' ', '')
+                logger.warning(f"⚠️  Unknown model type for {filename}, skipping...")
+                return None, None
+        
+        loaded_count = 0
+        for model_file in all_model_files:
+            model_name, ModelClass = detect_model_class(model_file)
+            
+            if model_name is None or ModelClass is None:
                 continue
-
+            
+            # Skip if already loaded (avoid duplicates)
+            if model_name in self.models:
+                logger.info(f"⚠️  Skipping duplicate model: {model_name}")
+                continue
+            
             try:
-                # Use get_model from training module if available
-                if MODELS_IMPORTED:
-                    model = get_model(model_type, n_features=15, time_steps=20)
-                else:
-                    # Fallback - should not happen in normal use
-                    raise ImportError("Models not imported")
-
+                model = ModelClass(n_features=15, time_steps=20)
+                
                 # Load weights
-                state_dict = torch.load(model_path, map_location=self.device, weights_only=True)
+                state_dict = torch.load(model_file, map_location=self.device)
                 model.load_state_dict(state_dict)
                 model.to(self.device)
                 model.eval()
-
-                self.models[display_name] = model
-                logger.info(f"✅ {display_name} model loaded from {model_path}")
-
+                
+                self.models[model_name] = model
+                loaded_count += 1
+                logger.info(f"✅ {model_name} model loaded from {model_file}")
+                
             except Exception as e:
-                logger.error(f"❌ Failed to load {display_name} model: {e}")
-                raise
-
-        logger.info(f"✅ Loaded {len(self.models)} models successfully!")
+                logger.error(f"❌ Failed to load {model_name} model from {model_file}: {e}")
+        
+        logger.info(f"✅ Total {loaded_count} models loaded successfully!")
     
     def _prepare_csv_data(self, csv_path):
         """

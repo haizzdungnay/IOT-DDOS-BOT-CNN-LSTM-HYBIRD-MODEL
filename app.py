@@ -1,7 +1,5 @@
 """
-=============================================================================
 Flask App - Bot-IoT Multi-Model DDoS Detection System
-=============================================================================
 Features:
 - Dashboard với metrics và ranking
 - Training management (train mới, train lại)
@@ -9,6 +7,14 @@ Features:
 - History/Reports (lịch sử, báo cáo)
 - Real-time monitoring
 - Dataset management
+Flask App for Bot-IoT Multi-Model Dashboard
+Advanced Dashboard with:
+- Model Evaluation
+- Training Management
+- Real-time Monitoring
+- History & Reports
+- Dataset Management
+- Compare Results
 
 Author: IoT Security Research Team
 Date: 2026-01-03
@@ -31,7 +37,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'training'))
 
 from backend.replay_detector import ReplayDetector
-from backend.history_manager import get_history_manager
+from backend.api_routes import api
 
 # Configure logging
 logging.basicConfig(
@@ -44,7 +50,10 @@ logger = logging.getLogger('DemoApp')
 app = Flask(__name__, static_folder='public')
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Initialize SocketIO
+# Register API Blueprint
+app.register_blueprint(api)
+
+# Initialize SocketIO for real-time updates
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Initialize components
@@ -95,17 +104,21 @@ def broadcast_training_update(data):
 
 @app.route('/')
 def index():
+    """Serve main dashboard page"""
+    return send_from_directory('public', 'dashboard.html')
+
+
+@app.route('/old')
+def old_index():
+    """Serve old demo page"""
     return send_from_directory('public', 'index.html')
 
 
-@app.route('/<path:path>')
+@app.route('/static/<path:path>')
 def serve_static(path):
-    return send_from_directory('public', path)
+    """Serve static files"""
+    return send_from_directory('public/static', path)
 
-
-# =============================================================================
-# API: SYSTEM STATUS
-# =============================================================================
 
 @app.route('/api/status')
 def get_status():
@@ -730,13 +743,17 @@ def internal_error(error):
 # =============================================================================
 
 if __name__ == '__main__':
-    logger.info("=" * 70)
-    logger.info("🚀 Bot-IoT DDoS Detection System")
-    logger.info("=" * 70)
+    logger.info("="*70)
+    logger.info("🚀 Bot-IoT Advanced Dashboard Server")
+    logger.info("="*70)
     logger.info(f"Models: {list(detector.models.keys()) if detector else 'Not loaded'}")
     logger.info(f"Device: {detector.device if detector else 'N/A'}")
-    logger.info("=" * 70)
-
+    logger.info("="*70)
+    logger.info("📊 Dashboard: http://localhost:5000")
+    logger.info("📊 Old Demo:  http://localhost:5000/old")
+    logger.info("="*70)
+    
+    # Run with SocketIO
     socketio.run(
         app,
         host='0.0.0.0',

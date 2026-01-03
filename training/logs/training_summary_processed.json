@@ -1,0 +1,15 @@
+{
+  "models": {
+    "Parallel": {
+      "n_params": 172673,
+      "best_val_loss": 0.0001346422834954206,
+      "best_val_acc": 0.9999599997333316,
+      "best_epoch": 1,
+      "training_time": 1079.8951270580292
+    }
+  },
+  "total_time": 1082.2811229228973,
+  "device": "cuda",
+  "epochs": 3,
+  "class_weights_used": true
+}
