@@ -310,7 +310,7 @@
                 </div>
                 
                 <!-- Live Model Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                     <div id="liveCardCNN" class="bg-slate-800 rounded-xl p-6 border-2 border-slate-700">
                         <div class="flex justify-between items-center mb-4">
                             <h4 class="font-bold text-blue-400"><i class="fas fa-brain mr-2"></i>CNN</h4>
@@ -396,36 +396,6 @@
                                 <div class="text-center">
                                     <p class="text-xs text-gray-400">Wrong</p>
                                     <p id="liveHybridWrong" class="text-red-400 font-bold">0</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div id="liveCardParallel" class="bg-slate-800 rounded-xl p-6 border-2 border-slate-700">
-                        <div class="flex justify-between items-center mb-4">
-                            <h4 class="font-bold text-orange-400"><i class="fas fa-random mr-2"></i>Parallel</h4>
-                            <span id="liveParallelStatus" class="text-2xl">⚪</span>
-                        </div>
-                        <div class="space-y-3">
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Prediction:</span>
-                                <span id="liveParallelPred" class="font-bold">-</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-400">Confidence:</span>
-                                <span id="liveParallelConf" class="font-bold">-</span>
-                            </div>
-                            <div class="w-full bg-slate-700 rounded-full h-2">
-                                <div id="liveParallelProgress" class="bg-orange-600 h-2 rounded-full transition-all" style="width: 0%"></div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-700">
-                                <div class="text-center">
-                                    <p class="text-xs text-gray-400">Correct</p>
-                                    <p id="liveParallelCorrect" class="text-green-400 font-bold">0</p>
-                                </div>
-                                <div class="text-center">
-                                    <p class="text-xs text-gray-400">Wrong</p>
-                                    <p id="liveParallelWrong" class="text-red-400 font-bold">0</p>
                                 </div>
                             </div>
                         </div>

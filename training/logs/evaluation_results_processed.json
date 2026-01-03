@@ -1,24 +1,4 @@
 {
-  "Parallel": {
-    "accuracy": 0.9999399997333321,
-    "precision": 0.999984443269047,
-    "recall": 0.9999555534813847,
-    "f1_score": 0.9999699981665546,
-    "roc_auc": 0.9326996663353063,
-    "fpr": 0.3684210526315789,
-    "fnr": 4.444651861531316e-05,
-    "confusion_matrix": {
-      "tn": 12,
-      "fp": 7,
-      "fn": 20,
-      "tp": 449959
-    },
-    "total_samples": 449998,
-    "total_attacks": 449979,
-    "total_normal": 19,
-    "inference_time": 20.430936813354492,
-    "inference_time_per_sample": 0.04540228359538152
-  },
   "CNN": {
     "accuracy": 0.9998088880395024,
     "precision": 0.9999822186264333,
@@ -60,23 +40,23 @@
     "inference_time_per_sample": 0.03379063206586121
   },
   "Hybrid": {
-    "accuracy": 0.9999088884839488,
-    "precision": 0.9999822204047525,
-    "recall": 0.9999266632442847,
-    "f1_score": 0.9999544410528339,
-    "roc_auc": 0.8902859911240304,
-    "fpr": 0.42105263157894735,
-    "fnr": 7.333675571526671e-05,
+    "accuracy": 0.9999399997333321,
+    "precision": 0.999984443269047,
+    "recall": 0.9999555534813847,
+    "f1_score": 0.9999699981665546,
+    "roc_auc": 0.9326996663353063,
+    "fpr": 0.3684210526315789,
+    "fnr": 4.444651861531316e-05,
     "confusion_matrix": {
-      "tn": 11,
-      "fp": 8,
-      "fn": 33,
-      "tp": 449946
+      "tn": 12,
+      "fp": 7,
+      "fn": 20,
+      "tp": 449959
     },
     "total_samples": 449998,
     "total_attacks": 449979,
     "total_normal": 19,
-    "inference_time": 16.409183502197266,
-    "inference_time_per_sample": 0.03646501429383523
+    "inference_time": 20.430936813354492,
+    "inference_time_per_sample": 0.04540228359538152
   }
 }

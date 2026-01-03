@@ -340,9 +340,7 @@ class ReplayDetector:
             'lstm_correct': 0,
             'lstm_wrong': 0,
             'hybrid_correct': 0,
-            'hybrid_wrong': 0,
-            'parallel_correct': 0,
-            'parallel_wrong': 0
+            'hybrid_wrong': 0
         }
         
         # Thread control
@@ -402,6 +400,9 @@ class ReplayDetector:
                 return 'Hybrid_LSTM_CNN', HybridLSTMCNN
             elif 'hybrid_cnn_lstm' in basename or 'cnn_lstm' in basename:
                 return 'Hybrid', HybridCNNLSTM
+            elif 'hybrid' in basename:
+                # Hybrid_best.pt - use ParallelHybridCNNLSTM architecture
+                return 'Hybrid', ParallelHybridCNNLSTM
             elif 'lstm' in basename and 'cnn' not in basename:
                 return 'LSTM', LSTMModel
             elif 'cnn' in basename and 'lstm' not in basename:
