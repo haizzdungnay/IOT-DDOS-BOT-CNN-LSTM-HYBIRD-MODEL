@@ -45,15 +45,37 @@
             </div>
         </div>
 
+        <!-- Model Metrics Dashboard -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6" id="metricsSection">
+            <h2 class="text-xl font-bold mb-4">📊 Model Performance Metrics</h2>
+            <div id="metricsLoading" class="text-center text-gray-500 py-4">Loading metrics...</div>
+            <div id="metricsTable" class="hidden overflow-x-auto">
+                <table class="min-w-full table-auto">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="px-4 py-2 text-left">Rank</th>
+                            <th class="px-4 py-2 text-left">Model</th>
+                            <th class="px-4 py-2 text-right">Accuracy</th>
+                            <th class="px-4 py-2 text-right">F1-Score</th>
+                            <th class="px-4 py-2 text-right">ROC-AUC</th>
+                            <th class="px-4 py-2 text-right">FPR</th>
+                            <th class="px-4 py-2 text-right">FNR</th>
+                        </tr>
+                    </thead>
+                    <tbody id="metricsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Control Panel -->
         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
             <h2 class="text-xl font-bold mb-4">🎮 Control Panel</h2>
             <div class="flex gap-4 items-center flex-wrap">
-                <button onclick="startReplay()" id="startBtn" 
+                <button onclick="startReplay()" id="startBtn"
                         class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition">
                     ▶️ Start Replay
                 </button>
-                <button onclick="stopReplay()" id="stopBtn" 
+                <button onclick="stopReplay()" id="stopBtn"
                         class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition">
                     ⏹️ Stop Replay
                 </button>
@@ -486,9 +508,56 @@
             }
         }
 
+        // Load and display model metrics
+        function loadModelMetrics() {
+            fetch('/api/models/metrics')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok' && Object.keys(data.metrics).length > 0) {
+                        displayMetrics(data.metrics);
+                    } else {
+                        document.getElementById('metricsLoading').textContent = 'No metrics available yet.';
+                    }
+                })
+                .catch(err => {
+                    console.error('Error loading metrics:', err);
+                    document.getElementById('metricsLoading').textContent = 'Failed to load metrics.';
+                });
+        }
+
+        function displayMetrics(metrics) {
+            // Sort by F1 score (ranking)
+            const sorted = Object.entries(metrics).sort((a, b) =>
+                (b[1].f1_score || 0) - (a[1].f1_score || 0)
+            );
+
+            const rankIcons = ['🥇', '🥈', '🥉', '4️⃣'];
+            const tbody = document.getElementById('metricsBody');
+            tbody.innerHTML = '';
+
+            sorted.forEach(([name, m], idx) => {
+                const row = document.createElement('tr');
+                row.className = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-4 py-2 font-bold text-lg">${rankIcons[idx] || (idx + 1)}</td>
+                    <td class="px-4 py-2 font-semibold">${name}</td>
+                    <td class="px-4 py-2 text-right">${(m.accuracy * 100).toFixed(2)}%</td>
+                    <td class="px-4 py-2 text-right">${(m.f1_score * 100).toFixed(2)}%</td>
+                    <td class="px-4 py-2 text-right">${(m.roc_auc * 100).toFixed(2)}%</td>
+                    <td class="px-4 py-2 text-right ${m.fpr > 0.3 ? 'text-red-600' : 'text-green-600'}">${(m.fpr * 100).toFixed(2)}%</td>
+                    <td class="px-4 py-2 text-right">${(m.fnr * 100).toFixed(4)}%</td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('metricsLoading').classList.add('hidden');
+            document.getElementById('metricsTable').classList.remove('hidden');
+        }
+
         // Initialize
         window.onload = () => {
             document.getElementById('stopBtn').disabled = true;
+            loadModelMetrics();
         };
     </script>
 </body>

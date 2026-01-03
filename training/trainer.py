@@ -16,7 +16,6 @@ Date: 2026-01-03
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.cuda.amp import autocast, GradScaler
 import numpy as np
 import json
 import time
@@ -24,10 +23,81 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from tqdm import tqdm
 
+# Use new AMP API (torch.amp instead of deprecated torch.cuda.amp)
+try:
+    from torch.amp import autocast, GradScaler
+    AMP_NEW_API = True
+except ImportError:
+    from torch.cuda.amp import autocast, GradScaler
+    AMP_NEW_API = False
+
 from config import (
     DEVICE, EPOCHS, LEARNING_RATE, WEIGHT_DECAY,
     PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR
 )
+
+
+# =============================================================================
+# FOCAL LOSS - Giải quyết class imbalance tốt hơn BCEWithLogitsLoss
+# =============================================================================
+class FocalLoss(nn.Module):
+    """
+    Focal Loss for imbalanced classification
+
+    Focal Loss giảm weight cho các mẫu dễ phân loại (well-classified)
+    và tập trung vào các mẫu khó (misclassified).
+
+    FL(p_t) = -alpha_t * (1 - p_t)^gamma * log(p_t)
+
+    Args:
+        alpha: Weight cho positive class (Attack). Default: 0.25
+        gamma: Focusing parameter. gamma > 0 giảm loss cho well-classified.
+               gamma = 0 tương đương BCE. Default: 2.0
+        pos_weight: Additional weight cho positive class (từ class_weights)
+
+    References:
+        - "Focal Loss for Dense Object Detection" (Lin et al., 2017)
+    """
+
+    def __init__(self, alpha: float = 0.25, gamma: float = 2.0,
+                 pos_weight: torch.Tensor = None):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.pos_weight = pos_weight
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            logits: Raw model outputs (before sigmoid)
+            targets: Ground truth labels (0 or 1)
+
+        Returns:
+            Focal loss value
+        """
+        # Sigmoid to get probabilities
+        probs = torch.sigmoid(logits)
+
+        # Compute pt (probability of correct class)
+        pt = torch.where(targets == 1, probs, 1 - probs)
+
+        # Compute alpha_t
+        alpha_t = torch.where(targets == 1, self.alpha, 1 - self.alpha)
+
+        # Apply pos_weight if provided (for extreme imbalance)
+        if self.pos_weight is not None:
+            weight = torch.where(targets == 1, self.pos_weight, torch.ones_like(targets))
+            alpha_t = alpha_t * weight
+
+        # Focal loss
+        focal_weight = (1 - pt) ** self.gamma
+        bce = nn.functional.binary_cross_entropy_with_logits(
+            logits, targets, reduction='none'
+        )
+
+        loss = alpha_t * focal_weight * bce
+
+        return loss.mean()
 
 
 class EarlyStopping:
@@ -87,7 +157,10 @@ class Trainer:
                  learning_rate: float = LEARNING_RATE,
                  weight_decay: float = WEIGHT_DECAY,
                  use_amp: bool = True,
-                 class_weights: dict = None):
+                 class_weights: dict = None,
+                 use_focal_loss: bool = False,
+                 focal_alpha: float = 0.25,
+                 focal_gamma: float = 2.0):
         """
         Args:
             model: PyTorch model
@@ -97,14 +170,30 @@ class Trainer:
             weight_decay: L2 regularization
             use_amp: Su dung Automatic Mixed Precision (chi GPU)
             class_weights: Dict {0: weight_normal, 1: weight_attack} for imbalanced data
+            use_focal_loss: Su dung Focal Loss thay vi BCEWithLogitsLoss
+            focal_alpha: Alpha parameter cho Focal Loss (weight cho positive class)
+            focal_gamma: Gamma parameter cho Focal Loss (focusing parameter)
         """
         self.model = model.to(device)
         self.model_name = model_name
         self.device = device
 
-        # Loss function with optional class weights
-        if class_weights is not None:
-            # pos_weight = weight_attack / weight_normal (for BCEWithLogitsLoss)
+        # Loss function selection
+        if use_focal_loss:
+            # Focal Loss - tốt hơn cho extreme class imbalance
+            pos_weight = None
+            if class_weights is not None:
+                pos_weight = torch.tensor(class_weights[1] / class_weights[0]).to(device)
+            self.criterion = FocalLoss(
+                alpha=focal_alpha,
+                gamma=focal_gamma,
+                pos_weight=pos_weight
+            )
+            print(f"[Trainer] Using Focal Loss: alpha={focal_alpha}, gamma={focal_gamma}")
+            if pos_weight is not None:
+                print(f"[Trainer] pos_weight: {pos_weight.item():.6f}")
+        elif class_weights is not None:
+            # BCEWithLogitsLoss with class weights
             pos_weight = torch.tensor([class_weights[1] / class_weights[0]]).to(device)
             self.criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
             print(f"[Trainer] Class weights: Normal={class_weights[0]:.4f}, Attack={class_weights[1]:.4f}")
@@ -132,7 +221,13 @@ class Trainer:
 
         # AMP (chi dung cho GPU)
         self.use_amp = use_amp and torch.cuda.is_available()
-        self.scaler = GradScaler() if self.use_amp else None
+        if self.use_amp:
+            if AMP_NEW_API:
+                self.scaler = GradScaler('cuda')
+            else:
+                self.scaler = GradScaler()
+        else:
+            self.scaler = None
 
         # Training history
         self.history = {
@@ -177,7 +272,9 @@ class Trainer:
 
             # Forward pass (with AMP if enabled)
             if self.use_amp:
-                with autocast():
+                # Use new API: autocast('cuda') or old API: autocast()
+                autocast_ctx = autocast('cuda') if AMP_NEW_API else autocast()
+                with autocast_ctx:
                     outputs = self.model(X_batch)
                     loss = self.criterion(outputs, y_batch)
 
@@ -226,7 +323,8 @@ class Trainer:
             y_batch = y_batch.to(self.device, non_blocking=True)
 
             if self.use_amp:
-                with autocast():
+                autocast_ctx = autocast('cuda') if AMP_NEW_API else autocast()
+                with autocast_ctx:
                     outputs = self.model(X_batch)
                     loss = self.criterion(outputs, y_batch)
             else:

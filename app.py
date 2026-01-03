@@ -263,12 +263,15 @@ def start_training():
         models = data.get('models', ['CNN', 'LSTM', 'Hybrid'])
         epochs = data.get('epochs', 30)
         use_class_weights = data.get('use_class_weights', True)
+        use_focal_loss = data.get('use_focal_loss', False)  # New option
+        focal_alpha = data.get('focal_alpha', 0.25)
+        focal_gamma = data.get('focal_gamma', 2.0)
         data_dir = data.get('data_dir', 'processed_data')
 
         # Start training in background thread
         thread = threading.Thread(
             target=run_training,
-            args=(models, epochs, use_class_weights, data_dir)
+            args=(models, epochs, use_class_weights, data_dir, use_focal_loss, focal_alpha, focal_gamma)
         )
         thread.daemon = True
         thread.start()
@@ -283,7 +286,8 @@ def start_training():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-def run_training(models, epochs, use_class_weights, data_dir):
+def run_training(models, epochs, use_class_weights, data_dir,
+                 use_focal_loss=False, focal_alpha=0.25, focal_gamma=2.0):
     """Background training function"""
     global training_state
 
@@ -308,7 +312,8 @@ def run_training(models, epochs, use_class_weights, data_dir):
         val_loader = data['val_loader']
         class_weights = data.get('class_weights') if use_class_weights else None
 
-        add_training_log(f"Data loaded. Training on {DEVICE}")
+        loss_type = "Focal Loss" if use_focal_loss else "BCEWithLogitsLoss"
+        add_training_log(f"Data loaded. Training on {DEVICE} with {loss_type}")
 
         for model_name in models:
             training_state["current_model"] = model_name
@@ -324,7 +329,10 @@ def run_training(models, epochs, use_class_weights, data_dir):
             # Create trainer with callback
             trainer = Trainer(
                 model, model_name,
-                class_weights=class_weights
+                class_weights=class_weights,
+                use_focal_loss=use_focal_loss,
+                focal_alpha=focal_alpha,
+                focal_gamma=focal_gamma
             )
 
             # Custom training loop with progress updates
@@ -374,6 +382,9 @@ def run_training(models, epochs, use_class_weights, data_dir):
                 config={
                     'epochs': epochs,
                     'use_class_weights': use_class_weights,
+                    'use_focal_loss': use_focal_loss,
+                    'focal_alpha': focal_alpha if use_focal_loss else None,
+                    'focal_gamma': focal_gamma if use_focal_loss else None,
                     'data_dir': data_dir
                 },
                 history=trainer.history,

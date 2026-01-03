@@ -27,7 +27,7 @@ from config import (
     KEEP_FEATURES, LABEL_COLUMN, N_FEATURES,
     TIME_STEPS, STRIDE, BATCH_SIZE,
     RANDOM_STATE, TEST_SIZE, VAL_SIZE,
-    OUTPUTS_DIR, PROCESSED_DATA_DIR, DEVICE
+    OUTPUTS_DIR, PROCESSED_DATA_DIR, MODELS_DIR, DEVICE
 )
 
 
@@ -142,7 +142,8 @@ def load_and_preprocess_data(csv_path: str,
     X_test_scaled = scaler.transform(X_test_raw)
 
     if save_scaler:
-        scaler_path = OUTPUTS_DIR / "scaler_standard.pkl"
+        # Save to MODELS_DIR for replay_detector compatibility
+        scaler_path = MODELS_DIR / "scaler_standard.pkl"
         joblib.dump(scaler, scaler_path)
         print(f"    Saved scaler: {scaler_path}")
 
