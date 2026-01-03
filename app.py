@@ -38,6 +38,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'traini
 
 from backend.replay_detector import ReplayDetector
 from backend.api_routes import api
+from backend.history_manager import get_history_manager
 
 # Configure logging
 logging.basicConfig(

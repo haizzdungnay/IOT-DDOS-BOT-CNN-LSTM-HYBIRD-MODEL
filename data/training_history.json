@@ -178,6 +178,17 @@
       ],
       "type": "evaluation",
       "status": "failed"
+    },
+    {
+      "id": 4,
+      "timestamp": "2026-01-03T22:43:02.588996",
+      "models": [
+        "CNN",
+        "Hybrid",
+        "LSTM"
+      ],
+      "type": "evaluation",
+      "status": "failed"
     }
   ]
 }

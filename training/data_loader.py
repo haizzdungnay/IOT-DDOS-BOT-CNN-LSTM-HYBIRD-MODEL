@@ -23,12 +23,20 @@ import joblib
 from pathlib import Path
 import json
 
-from config import (
-    KEEP_FEATURES, LABEL_COLUMN, N_FEATURES,
-    TIME_STEPS, STRIDE, BATCH_SIZE,
-    RANDOM_STATE, TEST_SIZE, VAL_SIZE,
-    OUTPUTS_DIR, PROCESSED_DATA_DIR, MODELS_DIR, DEVICE
-)
+try:
+    from .config import (
+        KEEP_FEATURES, LABEL_COLUMN, N_FEATURES,
+        TIME_STEPS, STRIDE, BATCH_SIZE,
+        RANDOM_STATE, TEST_SIZE, VAL_SIZE,
+        OUTPUTS_DIR, PROCESSED_DATA_DIR, MODELS_DIR, DEVICE
+    )
+except ImportError:
+    from config import (
+        KEEP_FEATURES, LABEL_COLUMN, N_FEATURES,
+        TIME_STEPS, STRIDE, BATCH_SIZE,
+        RANDOM_STATE, TEST_SIZE, VAL_SIZE,
+        OUTPUTS_DIR, PROCESSED_DATA_DIR, MODELS_DIR, DEVICE
+    )
 
 
 class BotIoTDataset(Dataset):

@@ -31,10 +31,16 @@ except ImportError:
     from torch.cuda.amp import autocast, GradScaler
     AMP_NEW_API = False
 
-from config import (
-    DEVICE, EPOCHS, LEARNING_RATE, WEIGHT_DECAY,
-    PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR
-)
+try:
+    from .config import (
+        DEVICE, EPOCHS, LEARNING_RATE, WEIGHT_DECAY,
+        PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR
+    )
+except ImportError:
+    from config import (
+        DEVICE, EPOCHS, LEARNING_RATE, WEIGHT_DECAY,
+        PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR
+    )
 
 
 # =============================================================================
