@@ -1,0 +1,11 @@
+# Bytecode and caches
+__pycache__/
+*.pyc
+
+# Training artifacts (large)
+training/outputs/
+
+# Model/array weights placed elsewhere
+*.pt
+*.npy
+*.pkl

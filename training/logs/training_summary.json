@@ -1,0 +1,14 @@
+{
+  "models": {
+    "LSTM": {
+      "n_params": 130305,
+      "best_val_loss": 0.0010132048235797855,
+      "best_val_acc": 0.9998705192858116,
+      "best_epoch": 22,
+      "training_time": 10352.377715349197
+    }
+  },
+  "total_time": 10354.93317580223,
+  "device": "cuda",
+  "epochs": 30
+}
