@@ -62,6 +62,9 @@ training_state = {
     'pid': None
 }
 
+# Custom dataset path
+custom_dataset_path = None
+
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -511,31 +514,80 @@ def get_dataset_info():
 
 @api.route('/api/dataset/set-path', methods=['POST'])
 def set_dataset_path():
-    """Set custom dataset path for training"""
+    """Set custom dataset path for training - supports CSV files or folder with .npy files"""
+    global custom_dataset_path
     data = request.get_json()
     path = data.get('path', '')
     
     if not path:
         return jsonify({'status': 'error', 'message': 'Path is required'}), 400
     
+    # Normalize path
+    path = path.strip().strip('"').strip("'")
+    
     if not os.path.exists(path):
         return jsonify({'status': 'error', 'message': f'Path does not exist: {path}'}), 400
     
-    # Validate required files
-    required_files = ['X_train_seq.npy', 'y_train_seq.npy', 'X_val_seq.npy', 'y_val_seq.npy', 
-                      'X_test_seq.npy', 'y_test_seq.npy']
+    dataset_type = None
+    info = {}
     
-    missing = [f for f in required_files if not os.path.exists(os.path.join(path, f))]
-    
-    if missing:
+    # Check if it's a CSV file
+    if os.path.isfile(path) and path.lower().endswith('.csv'):
+        dataset_type = 'csv'
+        file_size = os.path.getsize(path)
+        info = {
+            'type': 'csv',
+            'file': os.path.basename(path),
+            'size_mb': round(file_size / (1024*1024), 2),
+            'path': path
+        }
+        custom_dataset_path = path
+        
+    # Check if it's a folder with .npy files
+    elif os.path.isdir(path):
+        required_files = ['X_train_seq.npy', 'y_train_seq.npy', 'X_val_seq.npy', 'y_val_seq.npy', 
+                          'X_test_seq.npy', 'y_test_seq.npy']
+        
+        found_npy = [f for f in required_files if os.path.exists(os.path.join(path, f))]
+        missing_npy = [f for f in required_files if not os.path.exists(os.path.join(path, f))]
+        
+        # Check for CSV files in folder
+        csv_files = [f for f in os.listdir(path) if f.lower().endswith('.csv')]
+        
+        if len(found_npy) == len(required_files):
+            dataset_type = 'preprocessed'
+            info = {
+                'type': 'preprocessed',
+                'files': found_npy,
+                'path': path
+            }
+            custom_dataset_path = path
+        elif csv_files:
+            dataset_type = 'csv_folder'
+            info = {
+                'type': 'csv_folder',
+                'csv_files': csv_files[:10],  # Show first 10
+                'total_csv': len(csv_files),
+                'path': path,
+                'note': 'Folder contains CSV files. Select a specific CSV or preprocess first.'
+            }
+            custom_dataset_path = path
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': f'Folder must contain preprocessed .npy files or CSV files. Missing: {missing_npy}'
+            }), 400
+    else:
         return jsonify({
             'status': 'error',
-            'message': f'Missing required files: {missing}'
+            'message': 'Path must be a CSV file or a folder containing preprocessed data'
         }), 400
     
     return jsonify({
         'status': 'ok',
         'message': f'Dataset path validated: {path}',
+        'dataset_type': dataset_type,
+        'info': info,
         'path': path
     })
 

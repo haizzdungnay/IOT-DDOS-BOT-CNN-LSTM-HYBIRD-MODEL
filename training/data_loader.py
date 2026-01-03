@@ -315,7 +315,7 @@ if __name__ == "__main__":
         break
 
 
-def load_from_processed_data(processed_dir: str = None) -> dict:
+def load_from_processed_data(processed_dir: str = None, batch_size: int = None) -> dict:
     """
     Load dữ liệu đã tiền xử lý sẵn từ processed_data/
     
@@ -326,6 +326,7 @@ def load_from_processed_data(processed_dir: str = None) -> dict:
     
     Args:
         processed_dir: Thư mục chứa các file .npy
+        batch_size: Kích thước batch (default: BATCH_SIZE từ config)
         
     Returns:
         dict: train_loader, val_loader, test_loader, class_weights, config
@@ -335,12 +336,15 @@ def load_from_processed_data(processed_dir: str = None) -> dict:
     if processed_dir is None:
         processed_dir = PROCESSED_DATA_DIR
     
+    if batch_size is None:
+        batch_size = BATCH_SIZE
+    
     processed_dir = Path(processed_dir)
     
     print("=" * 60)
-    print("LOAD DỮ LIỆU ĐÃ TIỀN XỬ LÝ")
+    print("LOAD PREPROCESSED DATA")
     print("=" * 60)
-    print(f"Thư mục: {processed_dir}")
+    print(f"Directory: {processed_dir}")
     
     # Load arrays
     print("\n[1] Loading numpy arrays...")
@@ -356,7 +360,7 @@ def load_from_processed_data(processed_dir: str = None) -> dict:
     print(f"    X_test:  {X_test.shape}")
     
     # Class distribution
-    print("\n[2] Phân bố lớp:")
+    print("\n[2] Class distribution:")
     for name, y in [("Train", y_train), ("Val", y_val), ("Test", y_test)]:
         n_normal = (y == 0).sum()
         n_attack = (y == 1).sum()
@@ -384,7 +388,8 @@ def load_from_processed_data(processed_dir: str = None) -> dict:
         print(f"    Attack weight: {class_weights.get(1, 1.0):.4f}")
     
     # Create DataLoaders
-    print("\n[5] Tạo DataLoaders...")
+    print("\n[5] Creating DataLoaders...")
+    print(f"    Batch size: {batch_size}")
     use_cuda = torch.cuda.is_available()
     num_workers = 4 if use_cuda else 0
     pin_memory = use_cuda
@@ -395,7 +400,7 @@ def load_from_processed_data(processed_dir: str = None) -> dict:
     
     train_loader = DataLoader(
         train_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
         pin_memory=pin_memory,
@@ -404,7 +409,7 @@ def load_from_processed_data(processed_dir: str = None) -> dict:
     
     val_loader = DataLoader(
         val_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory
@@ -412,7 +417,7 @@ def load_from_processed_data(processed_dir: str = None) -> dict:
     
     test_loader = DataLoader(
         test_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory
@@ -423,7 +428,7 @@ def load_from_processed_data(processed_dir: str = None) -> dict:
     print(f"    Test batches:  {len(test_loader)}")
     
     print("\n" + "=" * 60)
-    print("HOÀN THÀNH LOAD DỮ LIỆU!")
+    print("DATA LOADING COMPLETED!")
     print("=" * 60)
     
     return {
