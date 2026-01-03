@@ -26,11 +26,15 @@ logger = logging.getLogger('ReplayDetector')
 
 
 # =============================================================================
-# MODEL DEFINITIONS (Copy từ train_hybrid_standard.py)
+# MODEL DEFINITIONS (Copy từ train scripts)
 # =============================================================================
 
 class HybridCNNLSTM(nn.Module):
-    """🔥 Hybrid CNN→LSTM Model (CHUẨN IEEE PAPERS) - NO POOLING"""
+    """
+    🔥 CNN → LSTM (Kiến trúc CŨ)
+    Architecture: CNN first (NO pooling) → LSTM → Dense
+    File weight: Hybrid_CNN_LSTM_best.pt
+    """
     
     def __init__(self, n_features: int, time_steps: int):
         super(HybridCNNLSTM, self).__init__()
@@ -73,6 +77,137 @@ class HybridCNNLSTM(nn.Module):
         x = self.dropout_fc(x)
         x = self.fc_out(x)
         return x.squeeze(-1)
+
+
+class ParallelHybridCNNLSTM(nn.Module):
+    """
+    🔥 PARALLEL (CNN + LSTM Song Song)
+    Architecture: LSTM branch ‖ CNN branch → Concat → Dense
+    File weight: Parallel_Hybrid_best.pt
+    """
+    
+    def __init__(self, n_features: int, time_steps: int):
+        super(ParallelHybridCNNLSTM, self).__init__()
+        
+        # LSTM Branch
+        self.lstm = nn.LSTM(
+            input_size=n_features,
+            hidden_size=64,
+            num_layers=2,
+            batch_first=True,
+            dropout=0.3,
+            bidirectional=False
+        )
+        self.lstm_dropout = nn.Dropout(0.3)
+        
+        # CNN Branch
+        self.conv1 = nn.Conv1d(n_features, 64, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.pool1 = nn.MaxPool1d(2)
+        
+        self.conv2 = nn.Conv1d(64, 128, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm1d(128)
+        self.pool2 = nn.MaxPool1d(2)
+        
+        self.cnn_dropout = nn.Dropout(0.3)
+        self.relu = nn.ReLU()
+        
+        # Fusion
+        lstm_feat_dim = 64
+        cnn_feat_dim = 128 * (time_steps // 4)
+        combined_dim = lstm_feat_dim + cnn_feat_dim
+        
+        self.fc1 = nn.Linear(combined_dim, 128)
+        self.bn_fc = nn.BatchNorm1d(128)
+        self.fc_dropout = nn.Dropout(0.4)
+        self.fc_out = nn.Linear(128, 1)
+    
+    def forward(self, x):
+        # LSTM branch
+        lstm_out, _ = self.lstm(x)
+        lstm_feat = lstm_out[:, -1, :]
+        lstm_feat = self.lstm_dropout(lstm_feat)
+        
+        # CNN branch
+        cnn_in = x.permute(0, 2, 1)
+        cnn_out = self.relu(self.bn1(self.conv1(cnn_in)))
+        cnn_out = self.pool1(cnn_out)
+        cnn_out = self.cnn_dropout(cnn_out)
+        
+        cnn_out = self.relu(self.bn2(self.conv2(cnn_out)))
+        cnn_out = self.pool2(cnn_out)
+        cnn_out = self.cnn_dropout(cnn_out)
+        cnn_feat = cnn_out.flatten(1)
+        
+        # Combine
+        combined = torch.cat((lstm_feat, cnn_feat), dim=1)
+        out = self.relu(self.bn_fc(self.fc1(combined)))
+        out = self.fc_dropout(out)
+        out = self.fc_out(out)
+        return out.squeeze(-1)
+
+
+class HybridLSTMCNN(nn.Module):
+    """
+    🔥 LSTM → CNN (Kiến trúc MỚI - Vừa train xong!)
+    Architecture: LSTM first → CNN → Dense
+    File weight: LSTM_CNN_best.pt
+    """
+    
+    def __init__(self, n_features: int, time_steps: int):
+        super(HybridLSTMCNN, self).__init__()
+        
+        # LSTM Block (FIRST!)
+        self.lstm = nn.LSTM(
+            input_size=n_features,
+            hidden_size=100,
+            num_layers=2,
+            batch_first=True,
+            dropout=0.3,
+            bidirectional=False
+        )
+        self.lstm_dropout = nn.Dropout(0.3)
+        
+        # CNN Block (SECOND!)
+        self.conv1 = nn.Conv1d(100, 64, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.pool1 = nn.MaxPool1d(2)
+        
+        self.conv2 = nn.Conv1d(64, 128, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm1d(128)
+        self.pool2 = nn.MaxPool1d(2)
+        
+        self.cnn_dropout = nn.Dropout(0.3)
+        self.relu = nn.ReLU()
+        
+        # Dense Block
+        self.fc1 = nn.Linear(128 * (time_steps // 4), 128)
+        self.bn_fc = nn.BatchNorm1d(128)
+        self.fc_dropout = nn.Dropout(0.4)
+        self.fc_out = nn.Linear(128, 1)
+
+    def forward(self, x):
+        # LSTM first
+        lstm_out, _ = self.lstm(x)
+        lstm_out = self.lstm_dropout(lstm_out)
+        
+        # CNN second
+        cnn_in = lstm_out.permute(0, 2, 1)
+        cnn_out = self.relu(self.bn1(self.conv1(cnn_in)))
+        cnn_out = self.pool1(cnn_out)
+        cnn_out = self.cnn_dropout(cnn_out)
+        
+        cnn_out = self.relu(self.bn2(self.conv2(cnn_out)))
+        cnn_out = self.pool2(cnn_out)
+        cnn_out = self.cnn_dropout(cnn_out)
+        
+        # Classifier
+        flattened = cnn_out.flatten(1)
+        out = self.relu(self.bn_fc(self.fc1(flattened)))
+        out = self.fc_dropout(out)
+        out = self.fc_out(out)
+        
+        return out.squeeze(-1)
 
 
 class CNN1D(nn.Module):
@@ -229,16 +364,54 @@ class ReplayDetector:
             raise
     
     def _load_models(self):
-        """Load 3 PyTorch models"""
+        """
+        Load 3 PyTorch models
+        
+        Model configs:
+        - CNN: CNN1D → CNN_best.pt
+        - LSTM: LSTMModel → LSTM_best.pt
+        - Hybrid: Tự động detect kiến trúc dựa trên file name:
+            * LSTM_CNN_*.pt → HybridLSTMCNN (LSTM → CNN)
+            * Hybrid_CNN_LSTM_*.pt → HybridCNNLSTM (CNN → LSTM)
+        """
         self.models = {}
+        
+        # Tìm file Hybrid trong thư mục
+        import glob
+        import os
+        hybrid_files = glob.glob(f"{self.models_dir}/LSTM_CNN_*.pt") + \
+                      glob.glob(f"{self.models_dir}/Hybrid_CNN_LSTM_*.pt") + \
+                      glob.glob(f"{self.models_dir}/Parallel_Hybrid_*.pt")
+        
+        if not hybrid_files:
+            logger.warning(f"⚠️  No Hybrid model found in {self.models_dir}")
+            hybrid_filename = None
+            hybrid_class = HybridCNNLSTM  # Default
+        else:
+            hybrid_file = hybrid_files[0]  # Take first match
+            hybrid_filename = os.path.basename(hybrid_file)  # Extract filename only
+            # Detect architecture from filename
+            if 'Parallel_Hybrid' in hybrid_filename:
+                hybrid_class = ParallelHybridCNNLSTM
+                logger.info(f"📌 Detected PARALLEL (CNN ‖ LSTM) architecture")
+            elif 'LSTM_CNN' in hybrid_filename:
+                hybrid_class = HybridLSTMCNN
+                logger.info(f"📌 Detected LSTM → CNN architecture")
+            else:
+                hybrid_class = HybridCNNLSTM
+                logger.info(f"📌 Detected CNN → LSTM architecture")
         
         model_configs = {
             'CNN': (CNN1D, 'CNN_best.pt'),
             'LSTM': (LSTMModel, 'LSTM_best.pt'),
-            'Hybrid': (HybridCNNLSTM, 'Hybrid_CNN_LSTM_best.pt')
+            'Hybrid': (hybrid_class, hybrid_filename)
         }
         
         for name, (ModelClass, filename) in model_configs.items():
+            if filename is None:
+                logger.warning(f"⚠️  Skipping {name} model (no file found)")
+                continue
+                
             try:
                 model_path = f"{self.models_dir}/{filename}"
                 model = ModelClass(n_features=15, time_steps=20)
