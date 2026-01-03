@@ -135,6 +135,41 @@ def get_status():
     })
 
 
+def run_auto_evaluation(models: list, session_id: str):
+    """
+    Tự động chạy evaluation sau khi training hoàn tất
+    Cập nhật evaluation_results_processed.json
+    """
+    import subprocess
+    
+    try:
+        cmd = [
+            sys.executable,
+            'training/evaluate_processed.py',
+            '--models', *models,
+            '--model-dir', 'backend/models'  # Dùng model mới đã copy
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 phút timeout
+        )
+        
+        if result.returncode != 0:
+            add_training_log(f"Evaluation stderr: {result.stderr}")
+        
+        return result.returncode == 0
+        
+    except subprocess.TimeoutExpired:
+        add_training_log("⚠️ Evaluation timeout (5 min)")
+        return False
+    except Exception as e:
+        add_training_log(f"⚠️ Evaluation failed: {e}")
+        return False
+
+
 # =============================================================================
 # API: MODELS INFORMATION
 # =============================================================================
@@ -169,10 +204,10 @@ def get_models_metrics():
     """Lấy metrics đánh giá của các models (từ file logs)"""
     metrics = {}
 
-    # Đọc từ evaluation_results.json
+    # Đọc từ evaluation_results - ưu tiên processed (mới nhất) trước
     eval_files = [
-        'training/logs/evaluation_results.json',
-        'training/logs/evaluation_results_processed.json'
+        'training/logs/evaluation_results_processed.json',  # Ưu tiên file mới nhất
+        'training/logs/evaluation_results.json'             # Fallback
     ]
 
     for eval_file in eval_files:
@@ -180,7 +215,7 @@ def get_models_metrics():
             with open(eval_file, 'r') as f:
                 data = json.load(f)
                 for model_name, model_metrics in data.items():
-                    if model_name not in metrics:
+                    if model_name not in metrics:  # Chỉ thêm nếu chưa có
                         metrics[model_name] = model_metrics
 
     # Tính ranking
@@ -411,8 +446,47 @@ def run_training(models, epochs, use_class_weights, data_dir,
             )
 
             add_training_log(f"{model_name} completed. Best acc: {trainer.best_val_acc:.4f}")
+            
+            # Copy model mới sang backend/models/ để web có thể sử dụng
+            try:
+                import shutil
+                src_model = Path(f"training/outputs/{model_name}_best.pt")
+                dst_model = Path(f"backend/models/{model_name}_best.pt")
+                if src_model.exists():
+                    shutil.copy2(src_model, dst_model)
+                    add_training_log(f"✅ Copied {model_name}_best.pt to backend/models/")
+            except Exception as copy_err:
+                add_training_log(f"⚠️ Warning: Could not copy model: {copy_err}")
 
         add_training_log("\n✅ Training completed!")
+        
+        # Copy scaler từ processed_data sang backend/models
+        try:
+            import shutil
+            scaler_src = Path("processed_data/scaler_standard.pkl")
+            scaler_dst = Path("backend/models/scaler_standard.pkl")
+            if scaler_src.exists():
+                shutil.copy2(scaler_src, scaler_dst)
+                add_training_log("✅ Copied scaler_standard.pkl to backend/models/")
+        except Exception as scaler_err:
+            add_training_log(f"⚠️ Warning: Could not copy scaler: {scaler_err}")
+        
+        # Tự động chạy evaluation sau training
+        add_training_log("\n📊 Running automatic evaluation...")
+        try:
+            run_auto_evaluation(models, session_id)
+            add_training_log("✅ Evaluation completed!")
+        except Exception as eval_err:
+            add_training_log(f"⚠️ Evaluation error: {eval_err}")
+        
+        # Reload detector với models mới
+        global detector
+        try:
+            detector = ReplayDetector(models_dir='backend/models', data_dir='data')
+            add_training_log("✅ Detector reloaded with new models!")
+        except Exception as reload_err:
+            add_training_log(f"⚠️ Detector reload error: {reload_err}")
+        
         broadcast_training_update({'status': 'completed', 'session_id': session_id})
 
     except Exception as e:
