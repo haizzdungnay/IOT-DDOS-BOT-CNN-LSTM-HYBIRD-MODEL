@@ -186,6 +186,21 @@
       "dataset_path": "processed_data",
       "status": "failed",
       "duration_seconds": 5.099912
+    },
+    {
+      "id": 14,
+      "timestamp": "2026-01-04T10:20:28.345654",
+      "models": [
+        "CNN",
+        "Hybrid",
+        "LSTM"
+      ],
+      "epochs": 15,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "dataset_path": "processed_data",
+      "status": "completed",
+      "duration_seconds": 9162.760121
     }
   ],
   "evaluations": [
@@ -238,6 +253,28 @@
     {
       "id": 5,
       "timestamp": "2026-01-04T06:27:09.597259",
+      "models": [
+        "CNN",
+        "Hybrid",
+        "LSTM"
+      ],
+      "type": "evaluation",
+      "status": "failed"
+    },
+    {
+      "id": 6,
+      "timestamp": "2026-01-04T12:51:47.522263",
+      "models": [
+        "CNN",
+        "Hybrid",
+        "LSTM"
+      ],
+      "type": "evaluation",
+      "status": "failed"
+    },
+    {
+      "id": 7,
+      "timestamp": "2026-01-04T12:52:06.025209",
       "models": [
         "CNN",
         "Hybrid",

@@ -510,6 +510,41 @@
             
             <!-- Tab: Dataset Manager -->
             <div id="tab-dataset" class="tab-content">
+                <!-- Last Training Summary -->
+                <div class="bg-slate-800 rounded-xl p-6 mb-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold">
+                            <i class="fas fa-clock-rotate-left text-yellow-400 mr-2"></i>
+                            Last Training Session
+                        </h3>
+                        <button onclick="loadDatasetInfo()" class="text-blue-400 hover:text-blue-300 text-sm">
+                            <i class="fas fa-sync-alt mr-1"></i>Refresh
+                        </button>
+                    </div>
+                    <div id="lastTrainingInfo" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                        <div class="bg-slate-700/50 rounded-lg p-4">
+                            <p class="text-sm text-gray-400">Last Training</p>
+                            <p id="lastTrainingDate" class="text-lg font-bold text-yellow-400">-</p>
+                        </div>
+                        <div class="bg-slate-700/50 rounded-lg p-4">
+                            <p class="text-sm text-gray-400">Models Trained</p>
+                            <p id="lastTrainingModels" class="text-lg font-bold text-cyan-400">-</p>
+                        </div>
+                        <div class="bg-slate-700/50 rounded-lg p-4">
+                            <p class="text-sm text-gray-400">Epochs</p>
+                            <p id="lastTrainingEpochs" class="text-lg font-bold text-green-400">-</p>
+                        </div>
+                        <div class="bg-slate-700/50 rounded-lg p-4">
+                            <p class="text-sm text-gray-400">Duration</p>
+                            <p id="lastTrainingDuration" class="text-lg font-bold text-purple-400">-</p>
+                        </div>
+                        <div class="bg-slate-700/50 rounded-lg p-4">
+                            <p class="text-sm text-gray-400">Status</p>
+                            <p id="lastTrainingStatus" class="text-lg font-bold">-</p>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Current Dataset Info -->
                 <div class="bg-slate-800 rounded-xl p-6 mb-6">
                     <h3 class="text-xl font-bold mb-4">

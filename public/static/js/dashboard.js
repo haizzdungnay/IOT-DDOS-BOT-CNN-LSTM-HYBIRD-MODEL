@@ -430,8 +430,55 @@ async function loadDatasetInfo() {
                     (ds.class_distribution['1'] || 0).toLocaleString();
             }
         }
+        
+        // Also load last training info from history
+        await loadLastTrainingInfo();
     } catch (err) {
         console.error('Error loading dataset info:', err);
+    }
+}
+
+async function loadLastTrainingInfo() {
+    try {
+        const res = await fetch('/api/history');
+        const data = await res.json();
+        
+        if (data.status === 'ok' && data.history.trainings?.length > 0) {
+            const lastTraining = data.history.trainings[data.history.trainings.length - 1];
+            
+            // Format date
+            const date = new Date(lastTraining.timestamp);
+            document.getElementById('lastTrainingDate').textContent = date.toLocaleString('vi-VN');
+            
+            // Models trained
+            document.getElementById('lastTrainingModels').textContent = 
+                lastTraining.models?.join(', ') || '-';
+            
+            // Epochs
+            document.getElementById('lastTrainingEpochs').textContent = lastTraining.epochs || '-';
+            
+            // Duration
+            const duration = lastTraining.duration_seconds ? 
+                `${Math.round(lastTraining.duration_seconds)}s` : '-';
+            document.getElementById('lastTrainingDuration').textContent = duration;
+            
+            // Status with color
+            const statusEl = document.getElementById('lastTrainingStatus');
+            statusEl.textContent = lastTraining.status || 'unknown';
+            if (lastTraining.status === 'completed') {
+                statusEl.className = 'text-lg font-bold text-green-400';
+            } else {
+                statusEl.className = 'text-lg font-bold text-red-400';
+            }
+        } else {
+            document.getElementById('lastTrainingDate').textContent = 'No training yet';
+            document.getElementById('lastTrainingModels').textContent = '-';
+            document.getElementById('lastTrainingEpochs').textContent = '-';
+            document.getElementById('lastTrainingDuration').textContent = '-';
+            document.getElementById('lastTrainingStatus').textContent = '-';
+        }
+    } catch (err) {
+        console.error('Error loading last training info:', err);
     }
 }
 
@@ -736,6 +783,7 @@ function startTrainingPolling() {
                 showToast('Training completed!', 'success');
                 await loadModelsData();
                 await loadHistory();
+                await loadDatasetInfo();  // Refresh dataset info including last training summary
             }
             
         } catch (err) {
