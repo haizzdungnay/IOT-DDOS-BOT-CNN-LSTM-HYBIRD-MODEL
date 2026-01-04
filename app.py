@@ -371,17 +371,23 @@ def run_training(models, epochs, use_class_weights, data_dir,
     training_state["logs"] = []
 
     session_id = history_manager.generate_session_id()
+    
+    # Log ngay lập tức khi bắt đầu
+    add_training_log(f"🚀 Starting training: models={models}, epochs={epochs}")
+    add_training_log(f"📁 Data directory: {data_dir}")
 
     try:
         # Import training modules
+        add_training_log("📦 Importing training modules...")
         sys.path.insert(0, 'training')
         from training.config import DEVICE
         from training.data_loader import load_from_processed_data
         from training.models import get_model, count_parameters
         from training.trainer import Trainer
+        add_training_log(f"✅ Modules imported. Device: {DEVICE}")
 
         # Load data với GPU preloading (được xử lý tự động trong load_from_processed_data)
-        add_training_log(f"Loading data from {data_dir} with GPU preloading...")
+        add_training_log(f"📊 Loading data from {data_dir}...")
         
         # load_from_processed_data tự động sử dụng GPU preloading nếu có CUDA
         data = load_from_processed_data(
@@ -552,9 +558,25 @@ def add_training_log(message):
 @app.route('/api/training/status')
 def get_training_status():
     """Lấy trạng thái training hiện tại"""
+    # Format logs as simple strings for frontend
+    formatted_logs = []
+    for log in training_state.get('logs', []):
+        if isinstance(log, dict):
+            formatted_logs.append(log.get('message', str(log)))
+        else:
+            formatted_logs.append(str(log))
+    
     return jsonify({
         'status': 'ok',
-        'training_state': training_state
+        'training': {
+            'running': training_state.get('is_training', False),
+            'current_model': training_state.get('current_model', ''),
+            'current_epoch': training_state.get('current_epoch', 0),
+            'total_epochs': training_state.get('total_epochs', 0),
+            'progress': training_state.get('progress', 0),
+            'logs': formatted_logs
+        },
+        'training_state': training_state  # Keep for backward compatibility
     })
 
 
