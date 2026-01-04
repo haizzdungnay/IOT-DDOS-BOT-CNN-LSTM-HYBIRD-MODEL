@@ -25,7 +25,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import (
-    DEVICE, EPOCHS, BATCH_SIZE, LEARNING_RATE, MODEL_NAMES_ALL, OUTPUTS_DIR, LOGS_DIR, PROCESSED_DATA_DIR
+    DEVICE, EPOCHS, BATCH_SIZE, LEARNING_RATE, MODEL_NAMES_ALL, OUTPUTS_DIR, LOGS_DIR, PROCESSED_DATA_DIR,
+    GRADIENT_ACCUMULATION_STEPS
 )
 from data_loader import load_from_processed_data
 from models import get_model, count_parameters
@@ -37,8 +38,9 @@ def train_single_model(model_name: str,
                        val_loader,
                        epochs: int,
                        learning_rate: float = 0.001,
-                       class_weights: dict = None) -> dict:
-    """Train một model với class weights tùy chọn"""
+                       class_weights: dict = None,
+                       accumulation_steps: int = 2) -> dict:
+    """Train một model với GPU optimization"""
     print(f"\n{'#' * 60}")
     print(f"# TRAINING MODEL: {model_name}")
     print(f"{'#' * 60}")
@@ -48,13 +50,17 @@ def train_single_model(model_name: str,
     n_params = count_parameters(model)
     print(f"Parameters: {n_params:,}")
     print(f"Learning rate: {learning_rate}")
+    print(f"Gradient Accumulation: {accumulation_steps} steps")
+    print(f"Effective batch size: {train_loader.batch_size * accumulation_steps}")
 
     # Create trainer with class weights and learning rate
     trainer = Trainer(model, model_name, learning_rate=learning_rate, class_weights=class_weights)
 
-    # Train
+    # Train với accumulation steps
     start_time = time.time()
-    history = trainer.fit(train_loader, val_loader, epochs)
+    history = trainer.fit(train_loader, val_loader, epochs, 
+                          accumulation_steps=accumulation_steps,
+                          compile_model=False)  # Tắt compile trên Windows
     training_time = time.time() - start_time
 
     return {
@@ -69,7 +75,7 @@ def train_single_model(model_name: str,
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Train models with processed data')
+    parser = argparse.ArgumentParser(description='Train models with processed data - GPU Optimized')
     parser.add_argument('--models', nargs='+', default=['CNN', 'LSTM', 'Hybrid'],
                         choices=MODEL_NAMES_ALL,
                         help='Models to train')
@@ -81,16 +87,20 @@ def main():
                         help='Learning rate')
     parser.add_argument('--data-dir', type=str, default=str(PROCESSED_DATA_DIR),
                         help='Directory containing processed data')
+    parser.add_argument('--accum-steps', type=int, default=GRADIENT_ACCUMULATION_STEPS,
+                        help='Gradient accumulation steps')
     parser.add_argument('--no-weights', action='store_true',
                         help='Disable class weights (not recommended for imbalanced data)')
     args = parser.parse_args()
 
     print("\n" + "=" * 60)
-    print("TRAIN WITH PROCESSED DATA")
+    print("TRAIN WITH PROCESSED DATA - GPU OPTIMIZED")
     print("=" * 60)
     print(f"Models: {args.models}")
     print(f"Epochs: {args.epochs}")
     print(f"Batch size: {args.batch_size}")
+    print(f"Gradient Accumulation: {args.accum_steps}")
+    print(f"Effective batch: {args.batch_size * args.accum_steps}")
     print(f"Learning rate: {args.lr}")
     print(f"Data dir: {args.data_dir}")
     print(f"Device: {DEVICE}")
@@ -110,7 +120,8 @@ def main():
     for model_name in args.models:
         result = train_single_model(
             model_name, train_loader, val_loader,
-            args.epochs, args.lr, class_weights
+            args.epochs, args.lr, class_weights,
+            accumulation_steps=args.accum_steps
         )
         results[model_name] = result
 

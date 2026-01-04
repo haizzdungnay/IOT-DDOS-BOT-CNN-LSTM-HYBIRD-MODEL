@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 
 # Đường dẫn các file
-data_dir = r"E:\Bot_IOT_Dataset\Dataset\Dataset\5%\All features"
+data_dir = r"C:\IOT-DDOS-BOT-CNN-LSTM-HYBIRD-MODEL-CLEAN\data"
 files = [
     "UNSW_2018_IoT_Botnet_Full5pc_1.csv",
     "UNSW_2018_IoT_Botnet_Full5pc_2.csv",

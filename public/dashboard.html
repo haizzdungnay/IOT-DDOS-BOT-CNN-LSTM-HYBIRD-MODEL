@@ -433,6 +433,22 @@
                         <i class="fas fa-rocket text-orange-400 mr-2"></i>
                         Start New Training
                     </h3>
+                    
+                    <!-- Dataset Selection -->
+                    <div class="mb-6 p-4 bg-slate-700 rounded-lg">
+                        <label class="block text-sm text-gray-400 mb-2">
+                            <i class="fas fa-database mr-1"></i> Dataset Path (CSV)
+                        </label>
+                        <div class="flex gap-2">
+                            <input type="text" id="trainDatasetPath" placeholder="Auto-detect from data folder..." 
+                                   class="flex-1 bg-slate-600 border border-slate-500 rounded-lg px-4 py-2 text-sm">
+                            <button onclick="detectDataset()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm">
+                                <i class="fas fa-search"></i> Detect
+                            </button>
+                        </div>
+                        <p id="datasetInfo" class="text-xs text-gray-500 mt-2">Leave empty to auto-detect largest CSV in data folder</p>
+                    </div>
+                    
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div>
                             <label class="block text-sm text-gray-400 mb-2">Models to Train</label>
@@ -450,9 +466,10 @@
                             <label class="block text-sm text-gray-400 mb-2">Batch Size</label>
                             <select id="trainBatchSize" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2">
                                 <option value="32">32</option>
-                                <option value="64" selected>64</option>
+                                <option value="64">64</option>
                                 <option value="128">128</option>
                                 <option value="256">256</option>
+                                <option value="512" selected>512 (GPU Optimized)</option>
                             </select>
                         </div>
                         <div>
@@ -470,6 +487,9 @@
                         </button>
                         <button onclick="stopTraining()" id="trainStopBtn" disabled class="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-lg transition disabled:opacity-50">
                             <i class="fas fa-stop mr-2"></i>Stop Training
+                        </button>
+                        <button onclick="syncModels()" class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg transition">
+                            <i class="fas fa-sync mr-2"></i>Sync Models
                         </button>
                     </div>
                 </div>

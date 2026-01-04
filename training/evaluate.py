@@ -36,7 +36,7 @@ from sklearn.metrics import (
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import DEVICE, MODEL_NAMES, OUTPUTS_DIR, LOGS_DIR
+from config import DEVICE, MODEL_NAMES, OUTPUTS_DIR, LOGS_DIR, MODELS_DIR
 from data_loader import load_test_set_only
 from models import get_model
 
@@ -146,15 +146,18 @@ class ModelEvaluator:
         print(f"DANH GIA MODEL: {model_name}")
         print(f"{'=' * 50}")
 
-        # Load model
+        # Load model - try MODELS_DIR first (unified), then OUTPUTS_DIR (fallback)
         model = get_model(model_name)
-        model_path = OUTPUTS_DIR / f"{model_name}_best.pt"
+        model_path = MODELS_DIR / f"{model_name}_best.pt"
+        
+        if not model_path.exists():
+            model_path = OUTPUTS_DIR / f"{model_name}_best.pt"
 
         if not model_path.exists():
-            print(f"WARNING: Khong tim thay {model_path}")
+            print(f"WARNING: Khong tim thay model {model_name} trong MODELS_DIR hoac OUTPUTS_DIR")
             return None
 
-        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
         model.to(self.device)
         print(f"Loaded: {model_path}")
 

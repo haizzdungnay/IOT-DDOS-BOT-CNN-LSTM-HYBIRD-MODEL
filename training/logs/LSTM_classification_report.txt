@@ -2,9 +2,9 @@ Classification Report: LSTM
 ==================================================
               precision    recall  f1-score   support
 
-      Normal     0.0000    0.0000    0.0000        95
-      Attack     0.9999    1.0000    0.9999    733591
+      Normal     0.0002    0.2000    0.0004        95
+      Attack     0.9999    0.8760    0.9338    733591
 
-    accuracy                         0.9999    733686
-   macro avg     0.4999    0.5000    0.5000    733686
-weighted avg     0.9997    0.9999    0.9998    733686
+    accuracy                         0.8759    733686
+   macro avg     0.5000    0.5380    0.4671    733686
+weighted avg     0.9998    0.8759    0.9337    733686

@@ -1,50 +1,50 @@
 {
   "CNN": {
-    "accuracy": 0.9998705168150953,
-    "precision": 0.9998705168150953,
-    "recall": 1.0,
-    "f1_score": 0.9999352542158024,
-    "roc_auc": 0.5,
-    "fpr": 1.0,
-    "fnr": 0.0,
+    "accuracy": 0.9497387165626712,
+    "precision": 0.9998938098306267,
+    "recall": 0.9498330813764073,
+    "f1_score": 0.9742207718668339,
+    "roc_auc": 0.5857311283951498,
+    "fpr": 0.7789473684210526,
+    "fnr": 0.05016691862359271,
     "confusion_matrix": {
-      "tn": 0,
-      "fp": 95,
-      "fn": 0,
-      "tp": 733591
+      "tn": 21,
+      "fp": 74,
+      "fn": 36802,
+      "tp": 696789
     },
     "total_samples": 733686,
     "total_attacks": 733591,
     "total_normal": 95,
-    "inference_time": 41.58699059486389,
-    "inference_time_per_sample": 0.056682273608688036
+    "inference_time": 6.487066745758057,
+    "inference_time_per_sample": 0.008841748030844336
   },
   "LSTM": {
-    "accuracy": 0.9998705168150953,
-    "precision": 0.9998705168150953,
-    "recall": 1.0,
-    "f1_score": 0.9999352542158024,
-    "roc_auc": 0.9560327786263234,
-    "fpr": 1.0,
-    "fnr": 0.0,
+    "accuracy": 0.8759074045300033,
+    "precision": 0.9998817485039629,
+    "recall": 0.8759949345071028,
+    "f1_score": 0.9338474695358315,
+    "roc_auc": 0.569174598867618,
+    "fpr": 0.8,
+    "fnr": 0.12400506549289726,
     "confusion_matrix": {
-      "tn": 0,
-      "fp": 95,
-      "fn": 0,
-      "tp": 733591
+      "tn": 19,
+      "fp": 76,
+      "fn": 90969,
+      "tp": 642622
     },
     "total_samples": 733686,
     "total_attacks": 733591,
     "total_normal": 95,
-    "inference_time": 40.806949853897095,
-    "inference_time_per_sample": 0.05561909298241631
+    "inference_time": 7.020554542541504,
+    "inference_time_per_sample": 0.009568881704900332
   },
   "Hybrid": {
     "accuracy": 0.9998705168150953,
     "precision": 0.9998705168150953,
     "recall": 1.0,
     "f1_score": 0.9999352542158024,
-    "roc_auc": 0.5,
+    "roc_auc": 0.9650573613046536,
     "fpr": 1.0,
     "fnr": 0.0,
     "confusion_matrix": {
@@ -56,7 +56,7 @@
     "total_samples": 733686,
     "total_attacks": 733591,
     "total_normal": 95,
-    "inference_time": 49.88770270347595,
-    "inference_time_per_sample": 0.06799598561711134
+    "inference_time": 6.515445709228516,
+    "inference_time_per_sample": 0.008880428015838542
   }
 }

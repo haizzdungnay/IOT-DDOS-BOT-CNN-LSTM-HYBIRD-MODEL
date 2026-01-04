@@ -179,10 +179,18 @@ class ReplayDetector:
                 model = ModelClass(n_features=15, time_steps=20)
                 
                 # Load weights
-                state_dict = torch.load(model_file, map_location=self.device)
+                state_dict = torch.load(model_file, map_location=self.device, weights_only=True)
                 model.load_state_dict(state_dict)
                 model.to(self.device)
                 model.eval()
+                
+                # torch.compile() cho inference nhanh hơn (PyTorch 2.0+)
+                if hasattr(torch, 'compile'):
+                    try:
+                        model = torch.compile(model, mode='reduce-overhead')
+                        logger.info(f"   torch.compile() enabled for {model_name}")
+                    except Exception as e:
+                        logger.warning(f"   torch.compile() failed for {model_name}: {e}")
                 
                 self.models[model_name] = model
                 loaded_count += 1
@@ -247,7 +255,8 @@ class ReplayDetector:
         
         results = {}
         
-        with torch.no_grad():
+        # Sử dụng inference_mode thay vì no_grad (nhanh hơn)
+        with torch.inference_mode():
             for name, model in self.models.items():
                 try:
                     # Forward pass
@@ -265,6 +274,35 @@ class ReplayDetector:
                 except Exception as e:
                     logger.error(f"❌ Prediction error for {name}: {e}")
                     results[name] = {'pred': 0, 'prob': 0.5, 'confidence': 0.5}
+        
+        return results
+    
+    def predict_batch(self, sequences: np.ndarray) -> dict:
+        """
+        Batch prediction để tận dụng GPU tối đa
+        
+        Args:
+            sequences: numpy array (batch_size, 20, 15)
+        
+        Returns:
+            dict với predictions cho từng model
+        """
+        # Convert to tensor
+        seq_tensor = torch.FloatTensor(sequences).to(self.device)
+        
+        results = {name: {'preds': [], 'probs': []} for name in self.models.keys()}
+        
+        with torch.inference_mode():
+            for name, model in self.models.items():
+                try:
+                    logits = model(seq_tensor)
+                    probs = torch.sigmoid(logits)
+                    preds = (probs > 0.5).int()
+                    
+                    results[name]['preds'] = preds.cpu().numpy().tolist()
+                    results[name]['probs'] = probs.cpu().numpy().tolist()
+                except Exception as e:
+                    logger.error(f"❌ Batch prediction error for {name}: {e}")
         
         return results
     

@@ -699,12 +699,60 @@ function startEvaluationPolling() {
     }, 2000);
 }
 
+// Detect available dataset
+async function detectDataset() {
+    try {
+        const res = await fetch('/api/dataset/info');
+        const data = await res.json();
+        
+        if (data.status === 'ok') {
+            const info = data.info;
+            if (info.available_csv && info.available_csv.length > 0) {
+                // Use the largest CSV
+                const largestCsv = info.available_csv[0];
+                document.getElementById('trainDatasetPath').value = largestCsv.path;
+                document.getElementById('datasetInfo').textContent = 
+                    `Found: ${largestCsv.name} (${largestCsv.size_mb} MB, ${largestCsv.samples?.toLocaleString() || 'unknown'} samples)`;
+                document.getElementById('datasetInfo').classList.remove('text-gray-500');
+                document.getElementById('datasetInfo').classList.add('text-green-400');
+                showToast(`Dataset detected: ${largestCsv.name}`, 'success');
+            } else {
+                document.getElementById('datasetInfo').textContent = 'No CSV files found in data folder';
+                document.getElementById('datasetInfo').classList.add('text-red-400');
+                showToast('No dataset found', 'warning');
+            }
+        }
+    } catch (err) {
+        showToast('Error detecting dataset', 'error');
+    }
+}
+
+// Sync models from training outputs to backend
+async function syncModels() {
+    try {
+        const res = await fetch('/api/sync/full', { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.status === 'ok' || data.status === 'partial') {
+            showToast(`${data.message}`, 'success');
+            // Reload models list
+            loadModels();
+            loadMetrics();
+        } else {
+            showToast('Sync failed', 'error');
+        }
+    } catch (err) {
+        showToast('Error syncing models', 'error');
+    }
+}
+
 async function startTraining() {
     const checkboxes = document.querySelectorAll('.train-model-cb:checked');
     const models = Array.from(checkboxes).map(cb => cb.value);
     const epochs = parseInt(document.getElementById('trainEpochs').value);
     const batchSize = parseInt(document.getElementById('trainBatchSize').value);
     const lr = parseFloat(document.getElementById('trainLR').value);
+    const datasetPath = document.getElementById('trainDatasetPath').value.trim() || null;
     
     if (models.length === 0) {
         showToast('Please select at least one model', 'warning');
@@ -718,7 +766,13 @@ async function startTraining() {
         const res = await fetch('/api/training/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ models, epochs, batch_size: batchSize, learning_rate: lr })
+            body: JSON.stringify({ 
+                models, 
+                epochs, 
+                batch_size: batchSize, 
+                learning_rate: lr,
+                dataset_path: datasetPath 
+            })
         });
         
         const data = await res.json();

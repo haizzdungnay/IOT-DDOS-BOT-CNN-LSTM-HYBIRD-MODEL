@@ -19,6 +19,8 @@ import pickle
 import subprocess
 import threading
 import time
+import shutil
+import glob
 from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, jsonify, request
@@ -86,18 +88,18 @@ def save_training_history(history):
 
 
 def get_model_metrics(model_path, model_name):
-    """Get evaluation metrics for a single model"""
+    """Get evaluation metrics for a single model - unified source"""
     try:
-        # Check if evaluation results exist
-        eval_file = LOGS_DIR / 'evaluation_results_processed.json'
+        # Primary: evaluation_results.json (from evaluate.py)
+        eval_file = LOGS_DIR / 'evaluation_results.json'
         if eval_file.exists():
             with open(eval_file, 'r') as f:
                 results = json.load(f)
                 if model_name in results:
                     return results[model_name]
         
-        # Fallback to old results
-        eval_file = LOGS_DIR / 'evaluation_results.json'
+        # Fallback: evaluation_results_processed.json (legacy)
+        eval_file = LOGS_DIR / 'evaluation_results_processed.json'
         if eval_file.exists():
             with open(eval_file, 'r') as f:
                 results = json.load(f)
@@ -230,12 +232,11 @@ def evaluate_models():
         training_state['logs'] = []
         
         try:
-            # Run evaluate_processed.py
+            # Run evaluate.py (unified) instead of evaluate_processed.py
             cmd = [
                 sys.executable, 
-                str(BASE_DIR / 'training' / 'evaluate_processed.py'),
-                '--models', *models,
-                '--model-dir', str(MODELS_DIR)
+                str(BASE_DIR / 'training' / 'evaluate.py'),
+                '--models', *models
             ]
             
             process = subprocess.Popen(
@@ -283,21 +284,32 @@ def evaluate_models():
 
 @api.route('/api/models/metrics', methods=['GET'])
 def get_all_metrics():
-    """Get evaluation metrics for all models"""
+    """Get evaluation metrics for all models - unified source"""
     results = {}
+    source_file = None
     
-    # Try processed results first
-    eval_file = LOGS_DIR / 'evaluation_results_processed.json'
+    # Primary: evaluation_results.json (from evaluate.py)
+    eval_file = LOGS_DIR / 'evaluation_results.json'
     if eval_file.exists():
+        source_file = str(eval_file)
         with open(eval_file, 'r') as f:
             data = json.load(f)
             for model_name, metrics in data.items():
                 results[model_name] = format_metrics_for_display(metrics)
+    else:
+        # Fallback: evaluation_results_processed.json (legacy)
+        eval_file = LOGS_DIR / 'evaluation_results_processed.json'
+        if eval_file.exists():
+            source_file = str(eval_file)
+            with open(eval_file, 'r') as f:
+                data = json.load(f)
+                for model_name, metrics in data.items():
+                    results[model_name] = format_metrics_for_display(metrics)
     
     return jsonify({
         'status': 'ok',
         'metrics': results,
-        'source': str(eval_file) if eval_file.exists() else None
+        'source': source_file
     })
 
 
@@ -329,17 +341,34 @@ def start_training():
         training_state['start_time'] = datetime.now().isoformat()
         
         try:
+            # Use train_all.py with CSV support
+            # Determine dataset path (use provided or find CSV in data folder)
+            data_file = dataset_path
+            if not data_file:
+                # Look for merged CSV file first, then any CSV
+                merged_csv = DATA_DIR / 'UNSW_2018_IoT_Botnet_Full5pc_Merged_Optimized.csv'
+                if merged_csv.exists():
+                    data_file = str(merged_csv)
+                else:
+                    # Find any large CSV file in data folder
+                    csv_files = list(DATA_DIR.glob('*.csv'))
+                    csv_files = [f for f in csv_files if f.stat().st_size > 1000000]  # > 1MB
+                    if csv_files:
+                        data_file = str(max(csv_files, key=lambda x: x.stat().st_size))
+            
+            if not data_file:
+                training_state['logs'].append('Error: No dataset found! Please upload a CSV file.')
+                return
+            
+            training_state['logs'].append(f'Using dataset: {data_file}')
+            
             cmd = [
                 sys.executable,
-                str(BASE_DIR / 'training' / 'train_processed.py'),
+                str(BASE_DIR / 'training' / 'train_all.py'),
+                '--data', data_file,
                 '--models', *models,
-                '--epochs', str(epochs),
-                '--batch-size', str(batch_size),
-                '--lr', str(learning_rate)
+                '--epochs', str(epochs)
             ]
-            
-            if dataset_path:
-                cmd.extend(['--data-dir', dataset_path])
             
             process = subprocess.Popen(
                 cmd,
@@ -370,6 +399,27 @@ def start_training():
             
             process.wait()
             
+            # === AUTO COPY MODELS TO backend/models/ ===
+            if process.returncode == 0:
+                training_state['logs'].append('=' * 50)
+                training_state['logs'].append('Copying trained models to backend/models/...')
+                output_dir = BASE_DIR / 'training' / 'outputs'
+                copied_count = 0
+                for model_file in output_dir.glob('*_best.pt'):
+                    dst = MODELS_DIR / model_file.name
+                    shutil.copy2(model_file, dst)
+                    training_state['logs'].append(f'  ✅ Copied {model_file.name}')
+                    copied_count += 1
+                
+                # Also copy scaler if exists
+                scaler_src = output_dir / 'scaler_standard.pkl'
+                if scaler_src.exists():
+                    shutil.copy2(scaler_src, MODELS_DIR / 'scaler_standard.pkl')
+                    training_state['logs'].append(f'  ✅ Copied scaler_standard.pkl')
+                
+                training_state['logs'].append(f'Done! {copied_count} models copied.')
+                training_state['logs'].append('=' * 50)
+            
             # Save to history
             history = load_training_history()
             history['trainings'].append({
@@ -379,7 +429,7 @@ def start_training():
                 'epochs': epochs,
                 'batch_size': batch_size,
                 'learning_rate': learning_rate,
-                'dataset_path': dataset_path or 'processed_data',
+                'dataset_path': data_file or 'auto-detected',
                 'status': 'completed' if process.returncode == 0 else 'failed',
                 'duration_seconds': (datetime.now() - datetime.fromisoformat(training_state['start_time'])).total_seconds()
             })
@@ -439,6 +489,145 @@ def training_status():
     })
 
 
+@api.route('/api/models/reload', methods=['POST'])
+def reload_models():
+    """Reload models after training - triggers ReplayDetector to reload"""
+    # Get current model files
+    model_files = scan_models_directory()
+    
+    return jsonify({
+        'status': 'ok',
+        'message': 'Models reloaded successfully. Restart app to apply changes.',
+        'models': list(model_files.keys()),
+        'note': 'For hot-reload, restart the Flask app'
+    })
+
+
+@api.route('/api/models/copy-from-training', methods=['POST'])
+def copy_models_from_training():
+    """Manually copy trained models from training/outputs to backend/models"""
+    output_dir = BASE_DIR / 'training' / 'outputs'
+    copied = []
+    
+    for model_file in output_dir.glob('*_best.pt'):
+        dst = MODELS_DIR / model_file.name
+        shutil.copy2(model_file, dst)
+        copied.append(model_file.name)
+    
+    # Also copy scaler
+    scaler_src = output_dir / 'scaler_standard.pkl'
+    if scaler_src.exists():
+        shutil.copy2(scaler_src, MODELS_DIR / 'scaler_standard.pkl')
+        copied.append('scaler_standard.pkl')
+    
+    return jsonify({
+        'status': 'ok',
+        'message': f'Copied {len(copied)} files',
+        'files': copied
+    })
+
+
+@api.route('/api/sync/status', methods=['GET'])
+def get_sync_status():
+    """Check synchronization status between training outputs and backend models"""
+    output_dir = BASE_DIR / 'training' / 'outputs'
+    sync_info = {
+        'models': {},
+        'scaler': {},
+        'test_data': {},
+        'evaluation_results': {},
+        'all_synced': True
+    }
+    
+    # Check each model
+    for model_name in ['CNN', 'LSTM', 'Hybrid']:
+        filename = f'{model_name}_best.pt'
+        output_path = output_dir / filename
+        backend_path = MODELS_DIR / filename
+        
+        output_exists = output_path.exists()
+        backend_exists = backend_path.exists()
+        
+        synced = False
+        if output_exists and backend_exists:
+            # Compare modification times
+            output_mtime = output_path.stat().st_mtime
+            backend_mtime = backend_path.stat().st_mtime
+            synced = abs(output_mtime - backend_mtime) < 1  # Within 1 second
+        elif not output_exists and backend_exists:
+            synced = True  # Only backend exists, that's fine
+        
+        sync_info['models'][model_name] = {
+            'output_exists': output_exists,
+            'backend_exists': backend_exists,
+            'synced': synced,
+            'output_mtime': datetime.fromtimestamp(output_path.stat().st_mtime).isoformat() if output_exists else None,
+            'backend_mtime': datetime.fromtimestamp(backend_path.stat().st_mtime).isoformat() if backend_exists else None
+        }
+        
+        if not synced:
+            sync_info['all_synced'] = False
+    
+    # Check scaler
+    scaler_output = output_dir / 'scaler_standard.pkl'
+    scaler_backend = MODELS_DIR / 'scaler_standard.pkl'
+    sync_info['scaler'] = {
+        'output_exists': scaler_output.exists(),
+        'backend_exists': scaler_backend.exists()
+    }
+    
+    # Check test data
+    sync_info['test_data'] = {
+        'X_test_exists': (output_dir / 'X_test.npy').exists(),
+        'y_test_exists': (output_dir / 'y_test.npy').exists()
+    }
+    
+    # Check evaluation results
+    eval_file = LOGS_DIR / 'evaluation_results.json'
+    sync_info['evaluation_results'] = {
+        'exists': eval_file.exists(),
+        'modified': datetime.fromtimestamp(eval_file.stat().st_mtime).isoformat() if eval_file.exists() else None
+    }
+    
+    return jsonify({
+        'status': 'ok',
+        'sync': sync_info
+    })
+
+
+@api.route('/api/sync/full', methods=['POST'])
+def full_sync():
+    """Full synchronization: copy all from training/outputs to backend/models"""
+    output_dir = BASE_DIR / 'training' / 'outputs'
+    synced = []
+    errors = []
+    
+    # Copy models
+    for model_file in output_dir.glob('*_best.pt'):
+        try:
+            dst = MODELS_DIR / model_file.name
+            shutil.copy2(model_file, dst)
+            synced.append(model_file.name)
+        except Exception as e:
+            errors.append(f'{model_file.name}: {str(e)}')
+    
+    # Copy scaler
+    scaler_src = output_dir / 'scaler_standard.pkl'
+    if scaler_src.exists():
+        try:
+            shutil.copy2(scaler_src, MODELS_DIR / 'scaler_standard.pkl')
+            synced.append('scaler_standard.pkl')
+        except Exception as e:
+            errors.append(f'scaler_standard.pkl: {str(e)}')
+    
+    return jsonify({
+        'status': 'ok' if not errors else 'partial',
+        'synced': synced,
+        'errors': errors,
+        'message': f'Synced {len(synced)} files' + (f', {len(errors)} errors' if errors else '')
+    })
+
+
 # =============================================================================
 # HISTORY & REPORTS APIs
 # =============================================================================
@@ -462,17 +651,31 @@ def clear_history():
 
 @api.route('/api/reports/<report_type>', methods=['GET'])
 def get_report(report_type):
-    """Get specific report"""
-    report_files = {
+    """Get specific report - try both naming conventions"""
+    # Try unified naming first (from evaluate.py)
+    report_files_unified = {
+        'cnn': 'CNN_classification_report.txt',
+        'lstm': 'LSTM_classification_report.txt',
+        'hybrid': 'Hybrid_classification_report.txt'
+    }
+    
+    # Fallback to legacy naming (from evaluate_processed.py)
+    report_files_legacy = {
         'cnn': 'CNN_classification_report_processed.txt',
         'lstm': 'LSTM_classification_report_processed.txt',
         'hybrid': 'Hybrid_classification_report_processed.txt'
     }
     
-    if report_type.lower() not in report_files:
+    if report_type.lower() not in report_files_unified:
         return jsonify({'status': 'error', 'message': 'Invalid report type'}), 400
     
-    report_path = LOGS_DIR / report_files[report_type.lower()]
+    # Try unified first
+    report_path = LOGS_DIR / report_files_unified[report_type.lower()]
+    filename_used = report_files_unified[report_type.lower()]
+    if not report_path.exists():
+        # Fallback to legacy
+        report_path = LOGS_DIR / report_files_legacy[report_type.lower()]
+        filename_used = report_files_legacy[report_type.lower()]
     
     if not report_path.exists():
         return jsonify({'status': 'error', 'message': 'Report not found'}), 404
@@ -483,7 +686,7 @@ def get_report(report_type):
     return jsonify({
         'status': 'ok',
         'report': content,
-        'filename': report_files[report_type.lower()],
+        'filename': filename_used,
         'modified': datetime.fromtimestamp(report_path.stat().st_mtime).isoformat()
     })
 
@@ -494,11 +697,42 @@ def get_report(report_type):
 
 @api.route('/api/dataset/info', methods=['GET'])
 def get_dataset_info():
-    """Get information about current dataset"""
+    """Get information about current dataset and available CSV files"""
+    import pandas as pd
+    
     info = {
         'processed_data': None,
-        'raw_data': None
+        'raw_data': None,
+        'available_csv': [],
+        'test_data': None
     }
+    
+    # Scan for CSV files in data folder
+    csv_files = list(DATA_DIR.glob('*.csv'))
+    csv_files = sorted(csv_files, key=lambda x: x.stat().st_size, reverse=True)
+    
+    for csv_file in csv_files:
+        try:
+            size_mb = round(csv_file.stat().st_size / (1024*1024), 2)
+            # Quick sample count (estimate from file size)
+            estimated_samples = None
+            if size_mb > 1:
+                # Read first few rows to estimate
+                try:
+                    sample_df = pd.read_csv(csv_file, nrows=1000)
+                    avg_row_size = csv_file.stat().st_size / 1000  # approximate
+                    estimated_samples = int(csv_file.stat().st_size / (csv_file.stat().st_size / 1000))
+                except:
+                    pass
+            
+            info['available_csv'].append({
+                'name': csv_file.name,
+                'path': str(csv_file),
+                'size_mb': size_mb,
+                'samples': estimated_samples
+            })
+        except Exception as e:
+            pass
     
     # Check processed_data
     processed_dir = BASE_DIR / 'processed_data'
@@ -536,15 +770,27 @@ def get_dataset_info():
         except Exception as e:
             info['processed_data'] = {'error': str(e)}
     
+    # Check test data in training/outputs
+    output_dir = BASE_DIR / 'training' / 'outputs'
+    if (output_dir / 'X_test.npy').exists() and (output_dir / 'y_test.npy').exists():
+        try:
+            X_test = np.load(output_dir / 'X_test.npy', mmap_mode='r')
+            y_test = np.load(output_dir / 'y_test.npy')
+            info['test_data'] = {
+                'path': str(output_dir),
+                'samples': int(X_test.shape[0]),
+                'attack_ratio': float((y_test == 1).mean() * 100)
+            }
+        except Exception as e:
+            info['test_data'] = {'error': str(e)}
+    
     # Check raw demo data
     demo_file = DATA_DIR / 'demo_test.csv'
     if demo_file.exists():
-        import pandas as pd
         try:
-            df = pd.read_csv(demo_file)
+            df = pd.read_csv(demo_file, nrows=100)  # Quick read
             info['raw_data'] = {
                 'path': str(demo_file),
-                'samples': len(df),
                 'columns': list(df.columns),
                 'size_mb': round(demo_file.stat().st_size / (1024*1024), 2)
             }
@@ -553,7 +799,7 @@ def get_dataset_info():
     
     return jsonify({
         'status': 'ok',
-        'dataset': info
+        'info': info
     })
 
 
