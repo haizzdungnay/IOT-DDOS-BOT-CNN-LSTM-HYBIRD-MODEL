@@ -31,7 +31,7 @@ from config import (
     DEVICE, EPOCHS, MODEL_NAMES, OUTPUTS_DIR, LOGS_DIR,
     print_config
 )
-from data_loader import load_and_preprocess_data
+from data_loader import load_and_preprocess_data, create_gpu_dataloaders
 from models import get_model, count_parameters, print_model_summary
 from trainer import Trainer
 
@@ -39,7 +39,8 @@ from trainer import Trainer
 def train_single_model(model_name: str,
                        train_loader,
                        val_loader,
-                       epochs: int) -> dict:
+                       epochs: int,
+                       gpu_preloaded: bool = True) -> dict:
     """
     Train mot model
 
@@ -58,9 +59,9 @@ def train_single_model(model_name: str,
     # Create trainer
     trainer = Trainer(model, model_name)
 
-    # Train
+    # Train với gpu_preloaded flag
     start_time = time.time()
-    history = trainer.fit(train_loader, val_loader, epochs)
+    history = trainer.fit(train_loader, val_loader, epochs, gpu_preloaded=gpu_preloaded)
     training_time = time.time() - start_time
 
     # Return results
@@ -93,24 +94,39 @@ def train_all_models(data_path: str,
         models_to_train = MODEL_NAMES
 
     print("\n" + "=" * 60)
-    print("TRAIN ALL MODELS")
+    print("TRAIN ALL MODELS - GPU PRELOADED MODE")
     print("=" * 60)
     print(f"Models: {models_to_train}")
     print(f"Epochs: {epochs}")
     print(f"Device: {DEVICE}")
     print("=" * 60)
 
-    # Load data
-    data = load_and_preprocess_data(data_path)
-    train_loader = data['train_loader']
-    val_loader = data['val_loader']
+    # Load data với GPU preloading
+    import torch
+    print("\n[GPU PRELOAD] Loading data từ processed_data...")
+    
+    try:
+        # Sử dụng GPU preloaded dataloaders
+        train_loader, val_loader, test_loader = create_gpu_dataloaders(DEVICE)
+        gpu_preloaded = True
+        print("[GPU PRELOAD] Data đã được load trực tiếp lên GPU!")
+    except Exception as e:
+        print(f"[WARNING] GPU preload failed: {e}")
+        print("[FALLBACK] Sử dụng CPU data loading...")
+        data = load_and_preprocess_data(data_path)
+        train_loader = data['train_loader']
+        val_loader = data['val_loader']
+        gpu_preloaded = False
 
     # Train each model
     results = {}
     total_start = time.time()
 
     for model_name in models_to_train:
-        result = train_single_model(model_name, train_loader, val_loader, epochs)
+        result = train_single_model(
+            model_name, train_loader, val_loader, epochs,
+            gpu_preloaded=gpu_preloaded
+        )
         results[model_name] = result
 
     total_time = time.time() - total_start

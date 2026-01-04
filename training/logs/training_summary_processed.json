@@ -2,28 +2,14 @@
   "models": {
     "CNN": {
       "n_params": 168321,
-      "best_val_loss": 0.0001450675420470213,
-      "best_val_acc": 0.9998666657777718,
-      "best_epoch": 7,
-      "training_time": 2339.282680749893
-    },
-    "Hybrid": {
-      "n_params": 113089,
-      "best_val_loss": 4.724574656459205e-05,
-      "best_val_acc": 0.9999755553925915,
+      "best_val_loss": 7.028705150452623e-05,
+      "best_val_acc": 0.999935555125923,
       "best_epoch": 2,
-      "training_time": 2688.1681518554688
-    },
-    "LSTM": {
-      "n_params": 130305,
-      "best_val_loss": 3.520372845141602e-05,
-      "best_val_acc": 0.9999711109185172,
-      "best_epoch": 9,
-      "training_time": 2590.4721245765686
+      "training_time": 87.58121180534363
     }
   },
-  "total_time": 7620.603581428528,
+  "total_time": 89.55005836486816,
   "device": "cuda",
-  "epochs": 30,
+  "epochs": 2,
   "class_weights_used": true
 }

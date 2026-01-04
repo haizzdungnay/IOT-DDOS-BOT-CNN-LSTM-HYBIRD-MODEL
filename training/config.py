@@ -99,19 +99,16 @@ STRIDE = 1         # Buoc nhay khi tao sequences
 # =============================================================================
 # TRAINING HYPERPARAMETERS - GPU OPTIMIZED
 # =============================================================================
-BATCH_SIZE = 512           # Tăng từ 64 lên 512 để tận dụng GPU tốt hơn
+BATCH_SIZE = 1024          # Tăng lên 1024 cho GPU preloading (không cần accumulation)
 EPOCHS = 50
 LEARNING_RATE = 0.001
 WEIGHT_DECAY = 1e-5        # L2 regularization
-
-# Gradient Accumulation - Effective batch = BATCH_SIZE * ACCUMULATION_STEPS
-ACCUMULATION_STEPS = 2     # Effective batch size = 512 * 2 = 1024
 
 # Early Stopping
 PATIENCE = 10              # So epochs cho phep khong cai thien
 MIN_DELTA = 1e-4           # Nguong cai thien toi thieu
 
-# DataLoader optimization
+# DataLoader optimization (cho CPU fallback mode)
 PREFETCH_FACTOR = 4        # Số batches prefetch trước
 PERSISTENT_WORKERS = False # True nếu num_workers > 0
 

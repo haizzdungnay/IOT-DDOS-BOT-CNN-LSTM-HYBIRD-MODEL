@@ -380,15 +380,26 @@ def run_training(models, epochs, use_class_weights, data_dir,
         from training.models import get_model, count_parameters
         from training.trainer import Trainer
 
-        # Load data
-        add_training_log(f"Loading data from {data_dir}...")
-        data = load_from_processed_data(data_dir)
+        # Load data với GPU preloading (được xử lý tự động trong load_from_processed_data)
+        add_training_log(f"Loading data from {data_dir} with GPU preloading...")
+        
+        # load_from_processed_data tự động sử dụng GPU preloading nếu có CUDA
+        data = load_from_processed_data(
+            processed_dir=data_dir,
+            use_gpu_preload=True,  # Tự động preload lên GPU
+            device=DEVICE
+        )
+        
         train_loader = data['train_loader']
         val_loader = data['val_loader']
+        
+        # Check if GPU preloaded (GPUPreloadedDataset has different type)
+        gpu_preloaded = hasattr(train_loader, 'device') and str(train_loader.device).startswith('cuda')
+        
         class_weights = data.get('class_weights') if use_class_weights else None
 
         loss_type = "Focal Loss" if use_focal_loss else "BCEWithLogitsLoss"
-        add_training_log(f"Data loaded. Training on {DEVICE} with {loss_type}")
+        add_training_log(f"Training on {DEVICE} with {loss_type} | GPU Preloaded: {gpu_preloaded}")
 
         for model_name in models:
             training_state["current_model"] = model_name
@@ -415,9 +426,9 @@ def run_training(models, epochs, use_class_weights, data_dir,
                 training_state["current_epoch"] = epoch
                 training_state["progress"] = int((epoch / epochs) * 100)
 
-                # Train one epoch
-                train_loss, train_acc = trainer.train_epoch(train_loader)
-                val_loss, val_acc = trainer.validate(val_loader)
+                # Train one epoch với gpu_preloaded flag
+                train_loss, train_acc = trainer.train_epoch(train_loader, gpu_preloaded=gpu_preloaded)
+                val_loss, val_acc = trainer.validate(val_loader, gpu_preloaded=gpu_preloaded)
 
                 # Update scheduler
                 trainer.scheduler.step(val_loss)

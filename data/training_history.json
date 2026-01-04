@@ -231,6 +231,49 @@
       "dataset_path": "processed_data",
       "status": "failed",
       "duration_seconds": 166.587087
+    },
+    {
+      "id": 17,
+      "timestamp": "2026-01-04T16:52:57.088392",
+      "models": [
+        "CNN",
+        "Hybrid",
+        "LSTM"
+      ],
+      "epochs": 10,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "dataset_path": "processed_data",
+      "status": "failed",
+      "duration_seconds": 107.040106
+    },
+    {
+      "id": 18,
+      "timestamp": "2026-01-04T16:57:28.006138",
+      "models": [
+        "LSTM"
+      ],
+      "epochs": 1,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "dataset_path": "processed_data",
+      "status": "completed",
+      "duration_seconds": 261.264749
+    },
+    {
+      "id": 19,
+      "timestamp": "2026-01-04T17:03:08.396542",
+      "models": [
+        "CNN",
+        "Hybrid",
+        "LSTM"
+      ],
+      "epochs": 5,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "dataset_path": "processed_data",
+      "status": "failed",
+      "duration_seconds": 3.469207
     }
   ],
   "evaluations": [
@@ -351,6 +394,26 @@
         "CNN",
         "Hybrid",
         "LSTM"
+      ],
+      "type": "evaluation",
+      "status": "failed"
+    },
+    {
+      "id": 12,
+      "timestamp": "2026-01-04T16:50:24.889426",
+      "models": [
+        "CNN",
+        "Hybrid",
+        "LSTM"
+      ],
+      "type": "evaluation",
+      "status": "failed"
+    },
+    {
+      "id": 13,
+      "timestamp": "2026-01-04T16:59:02.703696",
+      "models": [
+        "Hybrid"
       ],
       "type": "evaluation",
       "status": "failed"

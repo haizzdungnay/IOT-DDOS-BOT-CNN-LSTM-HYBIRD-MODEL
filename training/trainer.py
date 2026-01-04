@@ -34,14 +34,12 @@ except ImportError:
 try:
     from .config import (
         DEVICE, EPOCHS, LEARNING_RATE, WEIGHT_DECAY,
-        PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR,
-        ACCUMULATION_STEPS
+        PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR
     )
 except ImportError:
     from config import (
         DEVICE, EPOCHS, LEARNING_RATE, WEIGHT_DECAY,
-        PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR,
-        ACCUMULATION_STEPS
+        PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR
     )
 
 
@@ -255,16 +253,15 @@ class Trainer:
         print(f"[Trainer] Model: {model_name}")
         print(f"[Trainer] Device: {device}")
         print(f"[Trainer] AMP: {'Enabled' if self.use_amp else 'Disabled'}")
-        print(f"[Trainer] Gradient Accumulation: {ACCUMULATION_STEPS} steps")
 
-    def train_epoch(self, train_loader) -> tuple:
+    def train_epoch(self, train_loader, gpu_preloaded: bool = True) -> tuple:
         """
-        Train 1 epoch với Gradient Accumulation để tối ưu GPU
+        Train 1 epoch - Tối ưu cho GPU Preloaded data
 
-        Gradient Accumulation cho phép tích lũy gradients qua nhiều batches
-        trước khi update weights, hiệu quả như batch size lớn hơn.
-
-        Effective Batch Size = BATCH_SIZE * ACCUMULATION_STEPS
+        Khi gpu_preloaded=True:
+        - Data đã ở trên GPU, không cần .to(device)
+        - Không có data transfer overhead
+        - GPU utilization tối đa
 
         Returns:
             (loss, accuracy)
@@ -273,63 +270,46 @@ class Trainer:
         total_loss = 0.0
         correct = 0
         total = 0
-        
-        # Gradient accumulation counter
-        accumulation_steps = ACCUMULATION_STEPS
 
         pbar = tqdm(train_loader, desc=f"Training", leave=False)
 
-        for batch_idx, (X_batch, y_batch) in enumerate(pbar):
-            # Move to device (non_blocking để overlap với compute)
-            X_batch = X_batch.to(self.device, non_blocking=True)
-            y_batch = y_batch.to(self.device, non_blocking=True)
+        for X_batch, y_batch in pbar:
+            # Chỉ move to device nếu chưa preload
+            if not gpu_preloaded:
+                X_batch = X_batch.to(self.device, non_blocking=True)
+                y_batch = y_batch.to(self.device, non_blocking=True)
+
+            # Zero gradients - set_to_none=True nhanh hơn
+            self.optimizer.zero_grad(set_to_none=True)
 
             # Forward pass (with AMP if enabled)
             if self.use_amp:
-                # Use new API: autocast('cuda') or old API: autocast()
                 autocast_ctx = autocast('cuda') if AMP_NEW_API else autocast()
                 with autocast_ctx:
                     outputs = self.model(X_batch)
-                    # Scale loss by accumulation steps
-                    loss = self.criterion(outputs, y_batch) / accumulation_steps
+                    loss = self.criterion(outputs, y_batch)
 
-                # Backward pass with scaled gradients (accumulate)
+                # Backward pass with scaled gradients
                 self.scaler.scale(loss).backward()
-                
-                # Update weights every accumulation_steps
-                if (batch_idx + 1) % accumulation_steps == 0:
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                    self.optimizer.zero_grad(set_to_none=True)  # More efficient than zero_grad()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
             else:
                 outputs = self.model(X_batch)
-                loss = self.criterion(outputs, y_batch) / accumulation_steps
+                loss = self.criterion(outputs, y_batch)
                 loss.backward()
-                
-                if (batch_idx + 1) % accumulation_steps == 0:
-                    self.optimizer.step()
-                    self.optimizer.zero_grad(set_to_none=True)
+                self.optimizer.step()
 
-            # Metrics (use unscaled loss for tracking)
-            total_loss += loss.item() * accumulation_steps * X_batch.size(0)
+            # Metrics
+            total_loss += loss.item() * X_batch.size(0)
             preds = (torch.sigmoid(outputs) > 0.5).float()
             correct += (preds == y_batch).sum().item()
             total += y_batch.size(0)
 
             # Update progress bar
             pbar.set_postfix({
-                'loss': f"{loss.item() * accumulation_steps:.4f}",
+                'loss': f"{loss.item():.4f}",
                 'acc': f"{correct / total:.4f}"
             })
-        
-        # Handle remaining gradients (last incomplete accumulation)
-        if (batch_idx + 1) % accumulation_steps != 0:
-            if self.use_amp:
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-            else:
-                self.optimizer.step()
-            self.optimizer.zero_grad(set_to_none=True)
 
         avg_loss = total_loss / total
         accuracy = correct / total
@@ -337,7 +317,7 @@ class Trainer:
         return avg_loss, accuracy
 
     @torch.no_grad()
-    def validate(self, val_loader) -> tuple:
+    def validate(self, val_loader, gpu_preloaded: bool = True) -> tuple:
         """
         Validate model
 
@@ -350,8 +330,10 @@ class Trainer:
         total = 0
 
         for X_batch, y_batch in val_loader:
-            X_batch = X_batch.to(self.device, non_blocking=True)
-            y_batch = y_batch.to(self.device, non_blocking=True)
+            # Chỉ move to device nếu chưa preload
+            if not gpu_preloaded:
+                X_batch = X_batch.to(self.device, non_blocking=True)
+                y_batch = y_batch.to(self.device, non_blocking=True)
 
             if self.use_amp:
                 autocast_ctx = autocast('cuda') if AMP_NEW_API else autocast()
@@ -376,7 +358,8 @@ class Trainer:
             train_loader,
             val_loader,
             epochs: int = EPOCHS,
-            save_best: bool = True) -> Dict:
+            save_best: bool = True,
+            gpu_preloaded: bool = None) -> Dict:
         """
         Training loop chinh
 
@@ -385,24 +368,36 @@ class Trainer:
             val_loader: DataLoader cho validation
             epochs: So epochs
             save_best: Luu model tot nhat
+            gpu_preloaded: Data đã preload lên GPU (None = auto-detect)
 
         Returns:
             Training history dict
         """
+        # Auto-detect GPU preloaded status
+        train_gpu_preloaded = hasattr(train_loader, 'device') and str(train_loader.device).startswith('cuda')
+        val_gpu_preloaded = hasattr(val_loader, 'device') and str(val_loader.device).startswith('cuda')
+        
+        # Override with explicit parameter if provided
+        if gpu_preloaded is not None:
+            train_gpu_preloaded = gpu_preloaded
+            val_gpu_preloaded = gpu_preloaded
+        
         print("\n" + "=" * 60)
         print(f"TRAINING: {self.model_name}")
         print("=" * 60)
+        print(f"Train GPU Preloaded: {train_gpu_preloaded}")
+        print(f"Val GPU Preloaded: {val_gpu_preloaded}")
 
         total_start_time = time.time()
 
         for epoch in range(1, epochs + 1):
             epoch_start = time.time()
 
-            # Train
-            train_loss, train_acc = self.train_epoch(train_loader)
+            # Train - use train_gpu_preloaded
+            train_loss, train_acc = self.train_epoch(train_loader, gpu_preloaded=train_gpu_preloaded)
 
-            # Validate
-            val_loss, val_acc = self.validate(val_loader)
+            # Validate - use val_gpu_preloaded
+            val_loss, val_acc = self.validate(val_loader, gpu_preloaded=val_gpu_preloaded)
 
             # Update scheduler
             self.scheduler.step(val_loss)

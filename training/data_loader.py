@@ -63,6 +63,103 @@ class BotIoTDataset(Dataset):
         return self.X[idx], self.y[idx]
 
 
+class GPUPreloadedDataset:
+    """
+    Dataset được preload hoàn toàn lên GPU để tối đa hóa GPU utilization.
+    
+    Thay vì dùng DataLoader (có overhead từ data transfer mỗi batch),
+    class này giữ toàn bộ data trên GPU và yield batches trực tiếp.
+    
+    Ưu điểm:
+    - GPU không phải chờ CPU load data
+    - Không có overhead từ pin_memory, data transfer
+    - GPU utilization có thể đạt 90-100%
+    
+    Nhược điểm:
+    - Cần đủ VRAM để chứa dataset
+    - Không có data augmentation on-the-fly
+    """
+    
+    def __init__(self, X: np.ndarray, y: np.ndarray, batch_size: int, 
+                 device: torch.device, shuffle: bool = True, drop_last: bool = True):
+        """
+        Args:
+            X: Features array (n_samples, time_steps, n_features)
+            y: Labels array (n_samples,)
+            batch_size: Batch size
+            device: GPU device
+            shuffle: Shuffle data mỗi epoch
+            drop_last: Bỏ batch cuối nếu không đủ size
+        """
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.drop_last = drop_last
+        self.device = device
+        
+        # Chuyển data lên GPU một lần duy nhất
+        print(f"    [GPUPreload] Moving {X.shape[0]:,} samples to {device}...")
+        self.X = torch.FloatTensor(X).to(device)
+        self.y = torch.FloatTensor(y).to(device)
+        
+        self.n_samples = len(self.y)
+        self.n_batches = self.n_samples // batch_size
+        if not drop_last and self.n_samples % batch_size != 0:
+            self.n_batches += 1
+        
+        # Memory estimate
+        mem_mb = (self.X.element_size() * self.X.nelement() + 
+                  self.y.element_size() * self.y.nelement()) / (1024 * 1024)
+        print(f"    [GPUPreload] GPU Memory used: {mem_mb:.1f} MB")
+        print(f"    [GPUPreload] Batches per epoch: {self.n_batches}")
+    
+    def __len__(self):
+        return self.n_batches
+    
+    def __iter__(self):
+        if self.shuffle:
+            indices = torch.randperm(self.n_samples, device=self.device)
+            X_shuffled = self.X[indices]
+            y_shuffled = self.y[indices]
+        else:
+            X_shuffled = self.X
+            y_shuffled = self.y
+        
+        for i in range(self.n_batches):
+            start_idx = i * self.batch_size
+            end_idx = min(start_idx + self.batch_size, self.n_samples)
+            
+            yield X_shuffled[start_idx:end_idx], y_shuffled[start_idx:end_idx]
+
+
+def create_gpu_dataloaders(X_train, y_train, X_val, y_val, X_test, y_test,
+                           batch_size: int, device: torch.device) -> dict:
+    """
+    Tạo GPU-preloaded dataloaders để tối đa hóa GPU utilization.
+    
+    Returns:
+        dict với train_loader, val_loader, test_loader
+    """
+    print("\n[GPU Preload] Creating GPU-optimized dataloaders...")
+    
+    train_loader = GPUPreloadedDataset(
+        X_train, y_train, batch_size, device, shuffle=True, drop_last=True
+    )
+    
+    val_loader = GPUPreloadedDataset(
+        X_val, y_val, batch_size * 2, device, shuffle=False, drop_last=False
+    )
+    
+    test_loader = GPUPreloadedDataset(
+        X_test, y_test, batch_size * 2, device, shuffle=False, drop_last=False
+    )
+    
+    return {
+        'train_loader': train_loader,
+        'val_loader': val_loader,
+        'test_loader': test_loader
+    }
+
+
 def create_sequences(X: np.ndarray, y: np.ndarray,
                      time_steps: int = TIME_STEPS,
                      stride: int = STRIDE) -> tuple:
@@ -340,7 +437,8 @@ if __name__ == "__main__":
         break
 
 
-def load_from_processed_data(processed_dir: str = None, batch_size: int = None) -> dict:
+def load_from_processed_data(processed_dir: str = None, batch_size: int = None,
+                              use_gpu_preload: bool = True, device: torch.device = None) -> dict:
     """
     Load dữ liệu đã tiền xử lý sẵn từ processed_data/
     
@@ -352,6 +450,8 @@ def load_from_processed_data(processed_dir: str = None, batch_size: int = None) 
     Args:
         processed_dir: Thư mục chứa các file .npy
         batch_size: Kích thước batch (default: BATCH_SIZE từ config)
+        use_gpu_preload: Sử dụng GPU preloading để tối đa hóa GPU utilization
+        device: GPU device (default: DEVICE từ config)
         
     Returns:
         dict: train_loader, val_loader, test_loader, class_weights, config
@@ -363,6 +463,9 @@ def load_from_processed_data(processed_dir: str = None, batch_size: int = None) 
     
     if batch_size is None:
         batch_size = BATCH_SIZE
+    
+    if device is None:
+        device = DEVICE
     
     processed_dir = Path(processed_dir)
     
@@ -415,44 +518,103 @@ def load_from_processed_data(processed_dir: str = None, batch_size: int = None) 
     # Create DataLoaders
     print("\n[5] Creating DataLoaders...")
     print(f"    Batch size: {batch_size}")
-    use_cuda = torch.cuda.is_available()
-    num_workers = 0  # Avoid multiprocessing issues on Windows
-    pin_memory = use_cuda
+    print(f"    GPU Preload: {use_gpu_preload}")
     
-    train_dataset = BotIoTDataset(X_train, y_train.astype(np.float32))
-    val_dataset = BotIoTDataset(X_val, y_val.astype(np.float32))
-    test_dataset = BotIoTDataset(X_test, y_test.astype(np.float32))
+    use_cuda = torch.cuda.is_available() and str(device).startswith('cuda')
     
-    # GPU Optimized DataLoaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        drop_last=True
-    )
+    if use_gpu_preload and use_cuda:
+        # Kiểm tra VRAM có đủ không
+        gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        train_mem_mb = (X_train.nbytes + y_train.astype(np.float32).nbytes) / (1024 * 1024)
+        train_mem_gb = train_mem_mb / 1024
+        
+        print(f"    GPU VRAM: {gpu_mem_gb:.1f} GB")
+        print(f"    Train data size: {train_mem_mb:.1f} MB ({train_mem_gb:.2f} GB)")
+        
+        # Cần ít nhất 2GB spare cho model + gradients + optimizer + CUDA overhead
+        available_for_data = gpu_mem_gb - 2.0  # Reserve 2GB
+        
+        if train_mem_gb > available_for_data or gpu_mem_gb < 8:
+            # Không đủ VRAM hoặc GPU nhỏ < 8GB - fallback to standard mode với optimizations
+            if gpu_mem_gb < 8:
+                print(f"    [!] GPU < 8GB: Using optimized CPU loading instead of GPU preload")
+            else:
+                print(f"    [!] Not enough VRAM! Need {train_mem_gb:.2f}GB but only {available_for_data:.2f}GB available")
+            use_gpu_preload = False
+        else:
+            # GPU PRELOADED - Chỉ preload training data
+            print("    Mode: GPU PRELOADED (Training data on GPU)")
+            
+            # Train loader - GPU preloaded
+            train_loader = GPUPreloadedDataset(
+                X_train, y_train.astype(np.float32),
+                batch_size, device, shuffle=True, drop_last=True
+            )
+            
+            # Val và Test - dùng standard DataLoader với pin_memory
+            val_dataset = BotIoTDataset(X_val, y_val.astype(np.float32))
+            test_dataset = BotIoTDataset(X_test, y_test.astype(np.float32))
+            
+            val_loader = DataLoader(
+                val_dataset,
+                batch_size=batch_size * 2,
+                shuffle=False,
+                num_workers=0,
+                pin_memory=True
+            )
+            
+            test_loader = DataLoader(
+                test_dataset,
+                batch_size=batch_size * 2,
+                shuffle=False,
+                num_workers=0,
+                pin_memory=True
+            )
+            
+            print(f"    Train batches: {len(train_loader)} (GPU preloaded)")
+            print(f"    Val batches:   {len(val_loader)} (CPU + pin_memory)")
+            print(f"    Test batches:  {len(test_loader)} (CPU + pin_memory)")
     
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size * 2,  # Larger batch for validation (no gradients needed)
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory
-    )
-    
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=batch_size * 2,  # Larger batch for testing
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory
-    )
-    
-    print(f"    Train batches: {len(train_loader)} (batch={batch_size})")
-    print(f"    Val batches:   {len(val_loader)} (batch={batch_size * 2})")
-    print(f"    Test batches:  {len(test_loader)} (batch={batch_size * 2})")
-    print(f"    Pin Memory:    {pin_memory}")
+    # Standard DataLoader mode (fallback or explicit)
+    if not use_gpu_preload or not use_cuda:
+        # Standard DataLoader mode
+        print("    Mode: Standard DataLoader (CPU loading)")
+        num_workers = 0  # Avoid multiprocessing issues on Windows
+        pin_memory = use_cuda
+        
+        train_dataset = BotIoTDataset(X_train, y_train.astype(np.float32))
+        val_dataset = BotIoTDataset(X_val, y_val.astype(np.float32))
+        test_dataset = BotIoTDataset(X_test, y_test.astype(np.float32))
+        
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            drop_last=True
+        )
+        
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=batch_size * 2,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory
+        )
+        
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=batch_size * 2,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory
+        )
+        
+        print(f"    Train batches: {len(train_loader)} (batch={batch_size})")
+        print(f"    Val batches:   {len(val_loader)} (batch={batch_size * 2})")
+        print(f"    Test batches:  {len(test_loader)} (batch={batch_size * 2})")
+        print(f"    Pin Memory:    {pin_memory}")
     
     print("\n" + "=" * 60)
     print("DATA LOADING COMPLETED!")
