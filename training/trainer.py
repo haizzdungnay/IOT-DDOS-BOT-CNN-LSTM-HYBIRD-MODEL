@@ -256,12 +256,10 @@ class Trainer:
 
     def train_epoch(self, train_loader, gpu_preloaded: bool = True) -> tuple:
         """
-        Train 1 epoch - Tối ưu cho GPU Preloaded data
+        Train 1 epoch - Tối ưu với CUDA Prefetching
 
-        Khi gpu_preloaded=True:
-        - Data đã ở trên GPU, không cần .to(device)
-        - Không có data transfer overhead
-        - GPU utilization tối đa
+        Sử dụng CUDA streams để prefetch batch tiếp theo
+        trong khi GPU đang xử lý batch hiện tại.
 
         Returns:
             (loss, accuracy)
@@ -271,13 +269,50 @@ class Trainer:
         correct = 0
         total = 0
 
-        pbar = tqdm(train_loader, desc=f"Training", leave=False)
-
-        for X_batch, y_batch in pbar:
-            # Chỉ move to device nếu chưa preload
+        # CUDA stream cho prefetching
+        prefetch_stream = torch.cuda.Stream() if not gpu_preloaded and torch.cuda.is_available() else None
+        
+        data_iter = iter(train_loader)
+        
+        # Prefetch first batch
+        try:
+            next_batch = next(data_iter)
+        except StopIteration:
+            return 0.0, 0.0
+        
+        if not gpu_preloaded and prefetch_stream:
+            with torch.cuda.stream(prefetch_stream):
+                next_X = next_batch[0].to(self.device, non_blocking=True)
+                next_y = next_batch[1].to(self.device, non_blocking=True)
+        else:
+            next_X, next_y = next_batch[0], next_batch[1]
             if not gpu_preloaded:
-                X_batch = X_batch.to(self.device, non_blocking=True)
-                y_batch = y_batch.to(self.device, non_blocking=True)
+                next_X = next_X.to(self.device, non_blocking=True)
+                next_y = next_y.to(self.device, non_blocking=True)
+
+        n_batches = len(train_loader)
+        
+        for batch_idx in range(n_batches):
+            # Wait for prefetch to complete
+            if prefetch_stream:
+                torch.cuda.current_stream().wait_stream(prefetch_stream)
+            
+            X_batch, y_batch = next_X, next_y
+            
+            # Start prefetching next batch
+            try:
+                next_batch = next(data_iter)
+                if not gpu_preloaded and prefetch_stream:
+                    with torch.cuda.stream(prefetch_stream):
+                        next_X = next_batch[0].to(self.device, non_blocking=True)
+                        next_y = next_batch[1].to(self.device, non_blocking=True)
+                else:
+                    next_X, next_y = next_batch[0], next_batch[1]
+                    if not gpu_preloaded:
+                        next_X = next_X.to(self.device, non_blocking=True)
+                        next_y = next_y.to(self.device, non_blocking=True)
+            except StopIteration:
+                pass
 
             # Zero gradients - set_to_none=True nhanh hơn
             self.optimizer.zero_grad(set_to_none=True)
@@ -305,12 +340,11 @@ class Trainer:
             correct += (preds == y_batch).sum().item()
             total += y_batch.size(0)
 
-            # Update progress bar
-            pbar.set_postfix({
-                'loss': f"{loss.item():.4f}",
-                'acc': f"{correct / total:.4f}"
-            })
+            # Print progress periodically (every 100 batches)
+            if batch_idx % 100 == 0 or batch_idx == n_batches - 1:
+                print(f"\r  Batch {batch_idx+1}/{n_batches} | Loss: {loss.item():.4f} | Acc: {correct/total:.4f}", end="")
 
+        print()  # New line after progress
         avg_loss = total_loss / total
         accuracy = correct / total
 

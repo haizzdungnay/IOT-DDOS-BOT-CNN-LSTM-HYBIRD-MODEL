@@ -50,6 +50,10 @@ def get_device():
         # Toi uu GPU
         torch.backends.cudnn.benchmark = True
         torch.backends.cudnn.deterministic = False
+        
+        # Tối ưu thêm cho PyTorch 2.0+
+        if hasattr(torch, 'set_float32_matmul_precision'):
+            torch.set_float32_matmul_precision('medium')  # Faster matmul
     else:
         device = torch.device('cpu')
         print("[CPU] Khong tim thay GPU, su dung CPU")
@@ -99,7 +103,7 @@ STRIDE = 1         # Buoc nhay khi tao sequences
 # =============================================================================
 # TRAINING HYPERPARAMETERS - GPU OPTIMIZED
 # =============================================================================
-BATCH_SIZE = 1024          # Tăng lên 1024 cho GPU preloading (không cần accumulation)
+BATCH_SIZE = 2048          # Tăng lên 2048 để tối đa hóa GPU utilization
 EPOCHS = 50
 LEARNING_RATE = 0.001
 WEIGHT_DECAY = 1e-5        # L2 regularization

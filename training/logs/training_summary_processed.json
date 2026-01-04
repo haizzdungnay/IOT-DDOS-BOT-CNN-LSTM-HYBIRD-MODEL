@@ -2,13 +2,13 @@
   "models": {
     "CNN": {
       "n_params": 168321,
-      "best_val_loss": 7.028705150452623e-05,
-      "best_val_acc": 0.999935555125923,
+      "best_val_loss": 7.967835541683151e-05,
+      "best_val_acc": 0.9999266661777745,
       "best_epoch": 2,
-      "training_time": 87.58121180534363
+      "training_time": 79.47003626823425
     }
   },
-  "total_time": 89.55005836486816,
+  "total_time": 81.08327126502991,
   "device": "cuda",
   "epochs": 2,
   "class_weights_used": true
