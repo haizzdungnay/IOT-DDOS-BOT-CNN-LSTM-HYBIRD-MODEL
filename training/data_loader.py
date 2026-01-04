@@ -28,14 +28,16 @@ try:
         KEEP_FEATURES, LABEL_COLUMN, N_FEATURES,
         TIME_STEPS, STRIDE, BATCH_SIZE,
         RANDOM_STATE, TEST_SIZE, VAL_SIZE,
-        OUTPUTS_DIR, PROCESSED_DATA_DIR, MODELS_DIR, DEVICE
+        OUTPUTS_DIR, PROCESSED_DATA_DIR, MODELS_DIR, DEVICE,
+        PREFETCH_FACTOR, PERSISTENT_WORKERS
     )
 except ImportError:
     from config import (
         KEEP_FEATURES, LABEL_COLUMN, N_FEATURES,
         TIME_STEPS, STRIDE, BATCH_SIZE,
         RANDOM_STATE, TEST_SIZE, VAL_SIZE,
-        OUTPUTS_DIR, PROCESSED_DATA_DIR, MODELS_DIR, DEVICE
+        OUTPUTS_DIR, PROCESSED_DATA_DIR, MODELS_DIR, DEVICE,
+        PREFETCH_FACTOR, PERSISTENT_WORKERS
     )
 
 
@@ -207,48 +209,61 @@ def load_and_preprocess_data(csv_path: str,
         print(f"    Saved: data_metadata.json")
 
     # =========================================================================
-    # 8. Tao DataLoaders (toi uu cho GPU)
+    # 8. Tao DataLoaders (GPU OPTIMIZED)
     # =========================================================================
-    print("\n[8] Tao DataLoaders...")
+    print("\n[8] Tao DataLoaders (GPU Optimized)...")
 
-    # Kiem tra co GPU khong de bat pin_memory
+    # GPU Optimization settings
     use_cuda = torch.cuda.is_available()
     # num_workers=0 on Windows to avoid multiprocessing issues
+    # Nếu muốn dùng num_workers > 0 trên Windows, cần wrap trong if __name__ == '__main__'
     num_workers = 0
-    pin_memory = use_cuda  # Faster GPU transfer
+    pin_memory = use_cuda  # Faster GPU transfer (pinned memory)
+    
+    # Prefetch settings (chỉ áp dụng khi num_workers > 0)
+    prefetch_factor = PREFETCH_FACTOR if num_workers > 0 else None
+    persistent_workers = PERSISTENT_WORKERS if num_workers > 0 else False
 
     train_dataset = BotIoTDataset(X_train_final, y_train_final)
     val_dataset = BotIoTDataset(X_val, y_val)
     test_dataset = BotIoTDataset(X_test_seq, y_test_seq)
 
+    # DataLoader với các tối ưu cho GPU
     train_loader = DataLoader(
         train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
         num_workers=num_workers,
         pin_memory=pin_memory,
-        drop_last=True  # Bo batch cuoi neu khong du
+        drop_last=True,  # Bo batch cuoi neu khong du - giúp batch size nhất quán
+        prefetch_factor=prefetch_factor,
+        persistent_workers=persistent_workers
     )
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=BATCH_SIZE * 2,  # Larger batch for validation (no gradients)
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=pin_memory
+        pin_memory=pin_memory,
+        prefetch_factor=prefetch_factor,
+        persistent_workers=persistent_workers
     )
 
     test_loader = DataLoader(
         test_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=BATCH_SIZE * 2,  # Larger batch for testing
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=pin_memory
+        pin_memory=pin_memory,
+        prefetch_factor=prefetch_factor,
+        persistent_workers=persistent_workers
     )
 
-    print(f"    Train batches: {len(train_loader)}")
-    print(f"    Val batches:   {len(val_loader)}")
-    print(f"    Test batches:  {len(test_loader)}")
+    print(f"    Train batches: {len(train_loader)} (batch_size={BATCH_SIZE})")
+    print(f"    Val batches:   {len(val_loader)} (batch_size={BATCH_SIZE * 2})")
+    print(f"    Test batches:  {len(test_loader)} (batch_size={BATCH_SIZE * 2})")
+    print(f"    Pin Memory: {pin_memory}")
 
     print("\n" + "=" * 60)
     print("HOAN THANH XU LY DU LIEU!")
@@ -408,6 +423,7 @@ def load_from_processed_data(processed_dir: str = None, batch_size: int = None) 
     val_dataset = BotIoTDataset(X_val, y_val.astype(np.float32))
     test_dataset = BotIoTDataset(X_test, y_test.astype(np.float32))
     
+    # GPU Optimized DataLoaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -419,7 +435,7 @@ def load_from_processed_data(processed_dir: str = None, batch_size: int = None) 
     
     val_loader = DataLoader(
         val_dataset,
-        batch_size=batch_size,
+        batch_size=batch_size * 2,  # Larger batch for validation (no gradients needed)
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory
@@ -427,15 +443,16 @@ def load_from_processed_data(processed_dir: str = None, batch_size: int = None) 
     
     test_loader = DataLoader(
         test_dataset,
-        batch_size=batch_size,
+        batch_size=batch_size * 2,  # Larger batch for testing
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory
     )
     
-    print(f"    Train batches: {len(train_loader)}")
-    print(f"    Val batches:   {len(val_loader)}")
-    print(f"    Test batches:  {len(test_loader)}")
+    print(f"    Train batches: {len(train_loader)} (batch={batch_size})")
+    print(f"    Val batches:   {len(val_loader)} (batch={batch_size * 2})")
+    print(f"    Test batches:  {len(test_loader)} (batch={batch_size * 2})")
+    print(f"    Pin Memory:    {pin_memory}")
     
     print("\n" + "=" * 60)
     print("DATA LOADING COMPLETED!")

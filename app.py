@@ -141,8 +141,12 @@ def run_auto_evaluation(models: list, session_id: str):
     Cập nhật evaluation_results_processed.json
     """
     import subprocess
+    import os
     
     try:
+        # Lấy thư mục hiện tại
+        cwd = os.path.dirname(os.path.abspath(__file__))
+        
         cmd = [
             sys.executable,
             'training/evaluate_processed.py',
@@ -150,23 +154,45 @@ def run_auto_evaluation(models: list, session_id: str):
             '--model-dir', 'backend/models'  # Dùng model mới đã copy
         ]
         
+        add_training_log(f"Running evaluation command: {' '.join(cmd)}")
+        
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=300  # 5 phút timeout
+            timeout=300,  # 5 phút timeout
+            cwd=cwd  # Chạy từ thư mục gốc project
         )
+        
+        # Log output cho debugging
+        if result.stdout:
+            # Chỉ log dòng quan trọng
+            lines = result.stdout.strip().split('\n')
+            for line in lines[-10:]:  # 10 dòng cuối
+                if line.strip():
+                    add_training_log(f"[Eval] {line}")
         
         if result.returncode != 0:
             add_training_log(f"Evaluation stderr: {result.stderr}")
+            return False
         
-        return result.returncode == 0
+        # Verify file was updated
+        eval_file = Path(cwd) / 'training' / 'logs' / 'evaluation_results_processed.json'
+        if eval_file.exists():
+            import json
+            with open(eval_file, 'r') as f:
+                results = json.load(f)
+            add_training_log(f"✅ Evaluation results saved for: {list(results.keys())}")
+        
+        return True
         
     except subprocess.TimeoutExpired:
         add_training_log("⚠️ Evaluation timeout (5 min)")
         return False
     except Exception as e:
         add_training_log(f"⚠️ Evaluation failed: {e}")
+        import traceback
+        add_training_log(f"Traceback: {traceback.format_exc()}")
         return False
 
 

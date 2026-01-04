@@ -34,12 +34,14 @@ except ImportError:
 try:
     from .config import (
         DEVICE, EPOCHS, LEARNING_RATE, WEIGHT_DECAY,
-        PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR
+        PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR,
+        ACCUMULATION_STEPS
     )
 except ImportError:
     from config import (
         DEVICE, EPOCHS, LEARNING_RATE, WEIGHT_DECAY,
-        PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR
+        PATIENCE, MIN_DELTA, OUTPUTS_DIR, LOGS_DIR,
+        ACCUMULATION_STEPS
     )
 
 
@@ -253,10 +255,16 @@ class Trainer:
         print(f"[Trainer] Model: {model_name}")
         print(f"[Trainer] Device: {device}")
         print(f"[Trainer] AMP: {'Enabled' if self.use_amp else 'Disabled'}")
+        print(f"[Trainer] Gradient Accumulation: {ACCUMULATION_STEPS} steps")
 
     def train_epoch(self, train_loader) -> tuple:
         """
-        Train 1 epoch
+        Train 1 epoch với Gradient Accumulation để tối ưu GPU
+
+        Gradient Accumulation cho phép tích lũy gradients qua nhiều batches
+        trước khi update weights, hiệu quả như batch size lớn hơn.
+
+        Effective Batch Size = BATCH_SIZE * ACCUMULATION_STEPS
 
         Returns:
             (loss, accuracy)
@@ -265,16 +273,16 @@ class Trainer:
         total_loss = 0.0
         correct = 0
         total = 0
+        
+        # Gradient accumulation counter
+        accumulation_steps = ACCUMULATION_STEPS
 
         pbar = tqdm(train_loader, desc=f"Training", leave=False)
 
-        for X_batch, y_batch in pbar:
-            # Move to device
+        for batch_idx, (X_batch, y_batch) in enumerate(pbar):
+            # Move to device (non_blocking để overlap với compute)
             X_batch = X_batch.to(self.device, non_blocking=True)
             y_batch = y_batch.to(self.device, non_blocking=True)
-
-            # Zero gradients
-            self.optimizer.zero_grad()
 
             # Forward pass (with AMP if enabled)
             if self.use_amp:
@@ -282,29 +290,46 @@ class Trainer:
                 autocast_ctx = autocast('cuda') if AMP_NEW_API else autocast()
                 with autocast_ctx:
                     outputs = self.model(X_batch)
-                    loss = self.criterion(outputs, y_batch)
+                    # Scale loss by accumulation steps
+                    loss = self.criterion(outputs, y_batch) / accumulation_steps
 
-                # Backward pass with scaled gradients
+                # Backward pass with scaled gradients (accumulate)
                 self.scaler.scale(loss).backward()
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
+                
+                # Update weights every accumulation_steps
+                if (batch_idx + 1) % accumulation_steps == 0:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad(set_to_none=True)  # More efficient than zero_grad()
             else:
                 outputs = self.model(X_batch)
-                loss = self.criterion(outputs, y_batch)
+                loss = self.criterion(outputs, y_batch) / accumulation_steps
                 loss.backward()
-                self.optimizer.step()
+                
+                if (batch_idx + 1) % accumulation_steps == 0:
+                    self.optimizer.step()
+                    self.optimizer.zero_grad(set_to_none=True)
 
-            # Metrics
-            total_loss += loss.item() * X_batch.size(0)
+            # Metrics (use unscaled loss for tracking)
+            total_loss += loss.item() * accumulation_steps * X_batch.size(0)
             preds = (torch.sigmoid(outputs) > 0.5).float()
             correct += (preds == y_batch).sum().item()
             total += y_batch.size(0)
 
             # Update progress bar
             pbar.set_postfix({
-                'loss': f"{loss.item():.4f}",
+                'loss': f"{loss.item() * accumulation_steps:.4f}",
                 'acc': f"{correct / total:.4f}"
             })
+        
+        # Handle remaining gradients (last incomplete accumulation)
+        if (batch_idx + 1) % accumulation_steps != 0:
+            if self.use_amp:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                self.optimizer.step()
+            self.optimizer.zero_grad(set_to_none=True)
 
         avg_loss = total_loss / total
         accuracy = correct / total

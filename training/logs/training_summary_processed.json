@@ -2,28 +2,28 @@
   "models": {
     "CNN": {
       "n_params": 168321,
-      "best_val_loss": 0.0002232212836028784,
-      "best_val_acc": 0.9999133327555517,
-      "best_epoch": 5,
-      "training_time": 3297.5101823806763
+      "best_val_loss": 0.0001450675420470213,
+      "best_val_acc": 0.9998666657777718,
+      "best_epoch": 7,
+      "training_time": 2339.282680749893
     },
     "Hybrid": {
       "n_params": 113089,
-      "best_val_loss": 7.73814149374976e-05,
-      "best_val_acc": 0.9999888888148143,
-      "best_epoch": 6,
-      "training_time": 3111.414388656616
+      "best_val_loss": 4.724574656459205e-05,
+      "best_val_acc": 0.9999755553925915,
+      "best_epoch": 2,
+      "training_time": 2688.1681518554688
     },
     "LSTM": {
       "n_params": 130305,
-      "best_val_loss": 4.433164978865486e-05,
-      "best_val_acc": 0.9992644395407081,
-      "best_epoch": 6,
-      "training_time": 2739.1906023025513
+      "best_val_loss": 3.520372845141602e-05,
+      "best_val_acc": 0.9999711109185172,
+      "best_epoch": 9,
+      "training_time": 2590.4721245765686
     }
   },
-  "total_time": 9150.197919368744,
+  "total_time": 7620.603581428528,
   "device": "cuda",
-  "epochs": 15,
+  "epochs": 30,
   "class_weights_used": true
 }

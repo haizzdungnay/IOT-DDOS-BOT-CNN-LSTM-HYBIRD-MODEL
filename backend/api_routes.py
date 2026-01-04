@@ -243,7 +243,7 @@ def evaluate_models():
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                cwd=str(BASE_DIR / 'training')
+                cwd=str(BASE_DIR)  # Chạy từ thư mục gốc project
             )
             
             training_state['pid'] = process.pid
